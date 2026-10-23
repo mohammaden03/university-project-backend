@@ -1,0 +1,333 @@
+// Manuscript AI - Prisma PostgreSQL Schema
+// Academic platform for HTR, OCR, Persian/Arabic historical manuscript management
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  RESEARCHER
+  VIEWER
+}
+
+enum RecognitionMode {
+  LINE
+  FULL_PAGE
+}
+
+enum JobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ReviewStatus {
+  PENDING_REVIEW
+  REVIEWED
+  APPROVED
+}
+
+enum DatasetStatus {
+  DRAFT
+  VALIDATED
+  READY
+  ARCHIVED
+}
+
+enum SplitType {
+  TRAIN
+  VAL
+  TEST
+}
+
+enum ModelStatus {
+  ACTIVE
+  EXPERIMENTAL
+  DEPRECATED
+  OFFLINE
+}
+
+enum TrainingStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String
+  displayName  String
+  role         Role          @default(RESEARCHER)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  books        Book[]        @relation("BookCreator")
+  pages        ManuscriptPage[] @relation("PageUploader")
+  jobs         RecognitionJob[] @relation("JobRequester")
+  revisions    TranscriptionRevision[] @relation("RevisionAuthor")
+  datasets     Dataset[]     @relation("DatasetCreator")
+  auditEvents  AuditEvent[]
+
+  @@map("users")
+}
+
+model Book {
+  id                   String           @id @default(uuid())
+  title                String
+  author               String?
+  language             String           @default("fa") // 'fa', 'ar', 'ota'
+  description          String?          @db.Text
+  manuscriptIdentifier String?          // e.g. "MS. Persian 1528"
+  estimatedDate        String?          // e.g. "1522 CE", "10th century AH"
+  collectionName       String?          // e.g. "British Library"
+  sourceUrl            String?
+  license              String?
+  createdById          String
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  createdBy            User             @relation("BookCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  pages                ManuscriptPage[]
+  datasetSamples       DatasetSample[]
+
+  @@index([language])
+  @@index([author])
+  @@index([title])
+  @@map("books")
+}
+
+model ManuscriptPage {
+  id               String           @id @default(uuid())
+  bookId           String
+  pageNumber       Int
+  folioLabel       String?          // e.g. "Folio 12b"
+  imageStorageKey  String
+  originalFilename String
+  mimeType         String           // image/jpeg, image/png, image/webp
+  fileSize         Int
+  checksum         String           // SHA-256
+  imageWidth       Int
+  imageHeight      Int
+  language         String           @default("fa")
+  uploadedById     String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  book             Book             @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  uploadedBy       User             @relation("PageUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+  recognitionJobs  RecognitionJob[]
+  transcriptions   Transcription[]
+
+  @@unique([bookId, pageNumber])
+  @@index([bookId])
+  @@index([language])
+  @@map("manuscript_pages")
+}
+
+model RecognitionJob {
+  id                   String           @id @default(uuid())
+  pageId               String
+  requestedById        String
+  modelId              String
+  recognitionMode      RecognitionMode  @default(FULL_PAGE)
+  status               JobStatus        @default(QUEUED)
+  errorCode            String?
+  errorMessage         String?          @db.Text
+  submittedAt          DateTime         @default(now())
+  startedAt            DateTime?
+  completedAt          DateTime?
+  processingDurationMs Int?
+
+  page                 ManuscriptPage   @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  requestedBy          User             @relation("JobRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  transcriptions       Transcription[]
+
+  @@index([pageId])
+  @@index([status])
+  @@index([modelId])
+  @@map("recognition_jobs")
+}
+
+model Transcription {
+  id                   String                  @id @default(uuid())
+  pageId               String
+  recognitionJobId     String?
+  rawText              String                  @db.Text
+  correctedText        String                  @db.Text
+  normalizedSearchText String                  @db.Text
+  reviewStatus         ReviewStatus            @default(PENDING_REVIEW)
+  language             String                  @default("fa")
+  modelId              String?
+  modelVersion         String?
+  version              Int                     @default(1)
+  createdAt            DateTime                @default(now())
+  updatedAt            DateTime                @updatedAt
+
+  page                 ManuscriptPage          @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  recognitionJob       RecognitionJob?         @relation(fields: [recognitionJobId], references: [id], onDelete: SetNull)
+  revisions            TranscriptionRevision[]
+
+  @@index([pageId])
+  @@index([reviewStatus])
+  @@index([language])
+  @@map("transcriptions")
+}
+
+model TranscriptionRevision {
+  id              String        @id @default(uuid())
+  transcriptionId String
+  revisionNumber  Int
+  text            String        @db.Text
+  changedById     String
+  changeSummary   String?       @db.Text
+  createdAt       DateTime      @default(now())
+
+  transcription   Transcription @relation(fields: [transcriptionId], references: [id], onDelete: Cascade)
+  changedBy       User          @relation("RevisionAuthor", fields: [changedById], references: [id], onDelete: Restrict)
+
+  @@unique([transcriptionId, revisionNumber])
+  @@index([transcriptionId])
+  @@map("transcription_revisions")
+}
+
+model Dataset {
+  id               String           @id @default(uuid())
+  name             String
+  description      String?          @db.Text
+  language         String           @default("fa")
+  source           String?
+  license          String?
+  manifestLocation String
+  manifestChecksum String
+  status           DatasetStatus    @default(READY)
+  sampleCount      Int              @default(0)
+  createdById      String
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  createdBy        User             @relation("DatasetCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  samples          DatasetSample[]
+  evaluations      EvaluationExperiment[]
+  trainingJobs     TrainingJob[]
+
+  @@index([language])
+  @@index([status])
+  @@map("datasets")
+}
+
+model DatasetSample {
+  id                   String           @id @default(uuid())
+  datasetId            String
+  imageStorageKey      String
+  transcription        String           @db.Text
+  language             String           @default("fa")
+  bookId               String?
+  manuscriptIdentifier String?
+  pageNumber           Int?
+  lineIdentifier       String?
+  split                SplitType        @default(TRAIN)
+  source               String?
+  license              String?
+  annotationStatus     String           @default("VERIFIED")
+  createdAt            DateTime         @default(now())
+
+  dataset              Dataset          @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+  book                 Book?            @relation(fields: [bookId], references: [id], onDelete: SetNull)
+
+  @@index([datasetId])
+  @@index([split])
+  @@index([language])
+  @@map("dataset_samples")
+}
+
+model ModelRegistry {
+  id                 String           @id @default(uuid())
+  name               String
+  version            String
+  baseModelId        String?
+  providerType       String           // 'mock', 'pretrained', 'finetuned'
+  supportedLanguages String[]         @default(["fa"])
+  supportedModes     RecognitionMode[]
+  artifactLocation   String?
+  license            String           @default("Apache-2.0")
+  status             ModelStatus      @default(ACTIVE)
+  isAvailable        Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+
+  evaluations        EvaluationExperiment[]
+  trainingJobs       TrainingJob[]
+
+  @@unique([name, version])
+  @@index([status])
+  @@map("model_registries")
+}
+
+model EvaluationExperiment {
+  id                     String        @id @default(uuid())
+  modelId                String
+  datasetId              String
+  language               String        @default("fa")
+  sampleCount            Int
+  cer                    Float         // Character Error Rate (0.0 to 1.0+)
+  wer                    Float         // Word Error Rate (0.0 to 1.0+)
+  averageInferenceTimeMs Int
+  configuration          Json          @default("{}")
+  createdAt              DateTime      @default(now())
+
+  model                  ModelRegistry @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  dataset                Dataset       @relation(fields: [datasetId], references: [id], onDelete: Cascade)
+
+  @@index([modelId])
+  @@index([datasetId])
+  @@map("evaluation_experiments")
+}
+
+model TrainingJob {
+  id                     String         @id @default(uuid())
+  baseModelId            String
+  datasetId              String
+  status                 TrainingStatus @default(QUEUED)
+  configuration          Json           @default("{}")
+  logLocation            String?
+  outputArtifactLocation String?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  errorMessage           String?        @db.Text
+  createdAt              DateTime       @default(now())
+
+  baseModel              ModelRegistry  @relation(fields: [baseModelId], references: [id], onDelete: Restrict)
+  dataset                Dataset        @relation(fields: [datasetId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@index([baseModelId])
+  @@map("training_jobs")
+}
+
+model AuditEvent {
+  id         String   @id @default(uuid())
+  userId     String
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_events")
+}

@@ -1,0 +1,1078 @@
+# BACKEND MASTER PROMPT — MANUSCRIPT AI
+
+## 1. Your Role
+
+Act as a senior backend architect, NestJS and TypeScript engineer, PostgreSQL database designer, Python machine-learning engineer, API architect, security engineer, and DevOps engineer.
+
+Your task is to build a complete, production-minded backend for **Manuscript AI**, an academic platform for handwritten text recognition (HTR), optical character recognition (OCR), Persian and Arabic manuscript management, transcription correction, and advanced manuscript search.
+
+You must implement the actual application, not merely describe it or generate a few example files.
+
+You have access to the project filesystem and terminal if the environment supports them. Inspect the existing workspace, preserve existing user work, create the required files, run available commands, and verify the implementation.
+
+The frontend will be developed separately using React and TypeScript. Therefore, the backend must expose a complete, stable, documented REST API that an independently running frontend can consume without needing to share a filesystem, programming language, database connection, or runtime process.
+
+The backend must remain fully functional even when the frontend is stopped.
+
+The backend must also distinguish between actual AI inference and mock/demo behavior.
+
+## 2. Product Requirements
+
+Build a backend for a platform that enables authorized users to:
+
+1. Authenticate and manage sessions.
+2. Create, edit, list, and retrieve books.
+3. Upload and manage historical manuscript page images.
+4. Submit pages for OCR/HTR recognition.
+5. Track recognition job progress.
+6. Retrieve recognition results.
+7. Edit and save corrected transcriptions.
+8. Preserve transcription revision history.
+9. Search manuscript text and metadata.
+10. Manage dataset metadata and validate dataset manifests.
+11. Inspect available recognition models.
+12. Launch and monitor model evaluation.
+13. Configure and monitor fine-tuning jobs.
+14. Retrieve dashboard statistics.
+15. Manage users and roles.
+16. Access API documentation.
+17. Check system health and readiness.
+
+Implement every core endpoint and business operation described in this specification.
+
+If a feature depends on a missing model, GPU, dataset, or external resource, implement its API, validation, status management, and error handling, and explicitly report the missing dependency.
+
+Do not claim that unavailable AI functionality is operational.
+
+## 3. Independent Backend Architecture
+
+Use this architecture:
+
+- NestJS and TypeScript for the main application API.
+- PostgreSQL for structured data.
+- Prisma ORM for database access and migrations.
+- A separate Python FastAPI service for model inference, evaluation, and training.
+- Local persistent storage for development.
+- A storage abstraction that can later support S3-compatible object storage.
+- Docker Compose for local orchestration.
+- Swagger/OpenAPI for API documentation.
+
+The frontend must communicate only with the NestJS API.
+
+The NestJS API communicates with PostgreSQL and the Python AI service.
+
+The frontend must never connect directly to PostgreSQL or call internal Python service endpoints directly.
+
+### Service separation
+
+The application must support three independently runnable services:
+
+1. NestJS backend.
+2. PostgreSQL database.
+3. Python AI service.
+
+The frontend is a fourth, separate application developed in another repository.
+
+Provide both standalone development commands and Docker-based deployment instructions.
+
+## 4. Repository Structure
+
+Create the backend repository with this structure:
+
+```text
+manuscript-ai-backend/
+├── src/
+│   ├── main.ts
+│   ├── app.module.ts
+│   ├── auth/
+│   ├── users/
+│   ├── books/
+│   ├── manuscript-pages/
+│   ├── uploads/
+│   ├── recognition/
+│   ├── transcriptions/
+│   ├── search/
+│   ├── dashboard/
+│   ├── datasets/
+│   ├── models/
+│   ├── evaluations/
+│   ├── training/
+│   ├── audit/
+│   ├── health/
+│   ├── config/
+│   └── common/
+├── prisma/
+│   ├── schema.prisma
+│   ├── migrations/
+│   └── seed.ts
+├── test/
+├── ai-service/
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── api/
+│   │   ├── providers/
+│   │   ├── preprocessing/
+│   │   ├── segmentation/
+│   │   ├── recognition/
+│   │   ├── evaluation/
+│   │   ├── training/
+│   │   └── schemas/
+│   ├── tests/
+│   ├── requirements.txt
+│   └── Dockerfile
+├── storage/
+│   ├── uploads/
+│   ├── models/
+│   └── .gitkeep
+├── docs/
+│   ├── architecture.md
+│   ├── API_CONTRACT.md
+│   ├── database.md
+│   ├── installation.md
+│   ├── ai-models.md
+│   ├── dataset-guide.md
+│   ├── deployment.md
+│   ├── security.md
+│   ├── troubleshooting.md
+│   └── IMPLEMENTATION_STATUS.md
+├── scripts/
+├── Dockerfile
+├── docker-compose.yml
+├── .env.example
+├── .gitignore
+├── package.json
+├── tsconfig.json
+└── README.md
+```
+
+Adjust the structure where technically necessary, but maintain clear separation of concerns.
+
+Do not create empty modules solely to make the project appear complete.
+
+## 5. Technology and Coding Standards
+
+Use:
+
+- A supported Node.js LTS version.
+- TypeScript with strict checking.
+- NestJS.
+- PostgreSQL.
+- Prisma.
+- class-validator and class-transformer.
+- Swagger/OpenAPI.
+- Argon2id or an appropriate secure password-hashing library.
+- JWT authentication with a documented refresh-token strategy if refresh tokens are implemented.
+- Jest and Supertest.
+- FastAPI, Pydantic, PyTorch, and compatible model libraries for the AI service.
+- Docker Compose.
+
+Pin compatible dependency versions.
+
+Implement global request validation, centralized error handling, structured logging, safe configuration loading, and API versioning.
+
+Do not use `any` unnecessarily.
+
+Keep controllers thin. Put business logic in services and database access in appropriate service or repository layers.
+
+Do not suppress errors or pretend that an operation succeeded when it failed.
+
+## 6. API Contract: Mandatory Integration Rule
+
+The React frontend will be developed separately. Therefore, the backend API is a formal integration contract.
+
+Use this base path:
+
+`/api/v1`
+
+The default local backend URL must be:
+
+`http://localhost:3000`
+
+Expose Swagger at:
+
+`http://localhost:3000/api/docs`
+
+Expose the OpenAPI JSON specification at a documented route, preferably:
+
+`http://localhost:3000/api/docs-json`
+
+Use JSON for ordinary request and response bodies.
+
+Use `multipart/form-data` for image uploads.
+
+Use consistent HTTP status codes.
+
+Use ISO 8601 timestamps in UTC in API responses.
+
+Represent identifiers as strings, preferably UUIDs.
+
+Use explicit DTOs and response schemas.
+
+Never expose Prisma model objects directly as unrestricted API responses.
+
+Document the exact request parameters, response shapes, error codes, authentication requirements, and authorization requirements for every endpoint.
+
+Generate and maintain a machine-readable OpenAPI specification.
+
+The frontend must be able to generate TypeScript API types from this specification.
+
+Do not rename or change a public endpoint or response property without updating the API contract, documentation, and tests.
+
+### Standard success response
+
+Use a documented, consistent response structure such as:
+
+```json
+{
+  "success": true,
+  "data": {},
+  "meta": null
+}
+```
+
+For paginated results, use:
+
+```json
+{
+  "success": true,
+  "data": [],
+  "meta": {
+    "page": 1,
+    "limit": 20,
+    "total": 0,
+    "totalPages": 0
+  }
+}
+```
+
+For errors, use a consistent structure such as:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "The submitted data is invalid.",
+    "details": []
+  }
+}
+```
+
+Implement the actual response envelope through a NestJS interceptor or another consistent mechanism.
+
+Ensure Swagger accurately describes the actual response structure.
+
+Do not accidentally double-wrap responses or return a different shape from what the documentation promises.
+
+Use appropriate status codes, including 200, 201, 202, 204 where appropriate, 400, 401, 403, 404, 409, 413, 422 where applicable, 429, and 500.
+
+## 7. CORS and Independent Frontend Execution
+
+Configure CORS through environment variables.
+
+Provide these development defaults:
+
+```dotenv
+NODE_ENV=development
+PORT=3000
+FRONTEND_ORIGIN=http://localhost:5173
+CORS_ORIGINS=http://localhost:5173
+```
+
+The frontend may run on another host or port. Document how to configure allowed origins.
+
+Allow only configured origins.
+
+Do not use unrestricted CORS in production.
+
+Handle preflight OPTIONS requests.
+
+Allow the required methods and headers, including Authorization and Content-Type.
+
+If cookie-based authentication is used, configure credentials and cookie policies correctly. Do not combine credentialed requests with wildcard origins.
+
+The backend must not require the frontend to run in the same Docker container.
+
+The backend must not use frontend filesystem paths.
+
+The backend must not rely on frontend environment variables.
+
+The frontend must be able to consume the backend using only the published HTTP API and the documented authentication flow.
+
+## 8. Environment Configuration
+
+Create `.env.example` with all required variables.
+
+At minimum, include:
+
+```dotenv
+NODE_ENV=development
+PORT=3000
+
+DATABASE_URL=postgresql://app_user:replace_me@localhost:5432/manuscript_ai
+
+FRONTEND_ORIGIN=http://localhost:5173
+CORS_ORIGINS=http://localhost:5173
+
+JWT_ACCESS_SECRET=replace_with_a_secure_random_secret
+JWT_ACCESS_TTL=15m
+
+UPLOAD_DIR=./storage/uploads
+MODEL_DIR=./storage/models
+MAX_UPLOAD_SIZE_MB=20
+MAX_IMAGE_PIXELS=40000000
+
+AI_SERVICE_URL=http://localhost:8000
+AI_SERVICE_TIMEOUT_MS=120000
+AI_PROVIDER=mock
+MODEL_ID=
+MODEL_VERSION=
+
+LOG_LEVEL=info
+```
+
+Adjust the configuration to the implemented authentication and service architecture.
+
+Validate environment variables at startup.
+
+Never commit real secrets.
+
+Provide a safe development configuration and document the additional requirements for production.
+
+Do not silently fall back to insecure secrets.
+
+## 9. Authentication and Authorization
+
+Implement these roles:
+
+- ADMIN
+- RESEARCHER
+- VIEWER
+
+### ADMIN
+
+Can manage users, roles, books, pages, models, datasets, evaluation jobs, training jobs, and application configuration according to documented rules.
+
+### RESEARCHER
+
+Can manage authorized books and pages, upload images, request recognition, edit transcriptions, search content, and inspect available models and permitted reports.
+
+### VIEWER
+
+Can read permitted books, page metadata, approved transcriptions, and search results.
+
+Define whether viewers can access unreviewed recognition results. Enforce the decision consistently.
+
+Implement:
+
+- Login
+- Logout
+- Current-user endpoint
+- Secure password hashing
+- Authentication guards
+- Role guards
+- Account active/inactive status
+- Appropriate rate limiting
+- Session or refresh-token invalidation where applicable
+
+Use secure cookie-based refresh tokens or another explicitly documented strategy.
+
+Do not store plaintext passwords or expose password hashes through API responses.
+
+Do not create a hardcoded administrator password.
+
+A seed script may create a development administrator using credentials supplied through environment variables.
+
+## 10. Database Schema
+
+Use Prisma migrations.
+
+Implement relational models for:
+
+### User
+
+- id
+- email
+- passwordHash
+- displayName
+- role
+- isActive
+- createdAt
+- updatedAt
+
+### Book
+
+- id
+- title
+- author
+- language
+- description
+- manuscriptIdentifier
+- estimatedDate
+- collectionName
+- sourceUrl
+- license
+- createdById
+- createdAt
+- updatedAt
+
+### ManuscriptPage
+
+- id
+- bookId
+- pageNumber
+- folioLabel
+- imageStorageKey
+- originalFilename
+- mimeType
+- fileSize
+- checksum
+- imageWidth
+- imageHeight
+- language
+- uploadedById
+- createdAt
+- updatedAt
+
+### RecognitionJob
+
+- id
+- pageId
+- requestedById
+- modelId
+- recognitionMode
+- status
+- errorCode
+- errorMessage
+- submittedAt
+- startedAt
+- completedAt
+- processingDurationMs
+
+### Transcription
+
+- id
+- pageId
+- recognitionJobId
+- rawText
+- correctedText
+- normalizedSearchText
+- reviewStatus
+- language
+- modelId
+- modelVersion
+- createdAt
+- updatedAt
+
+### TranscriptionRevision
+
+- id
+- transcriptionId
+- revisionNumber
+- text
+- changedById
+- changeSummary
+- createdAt
+
+### Dataset
+
+- id
+- name
+- description
+- language
+- source
+- license
+- manifestLocation
+- manifestChecksum
+- status
+- createdById
+- createdAt
+- updatedAt
+
+### DatasetSample
+
+- id
+- datasetId
+- imageStorageKey
+- transcription
+- language
+- bookId
+- manuscriptIdentifier
+- pageNumber
+- lineIdentifier
+- split
+- source
+- license
+- annotationStatus
+- createdAt
+
+### ModelRegistry
+
+- id
+- name
+- version
+- baseModelId
+- providerType
+- supportedLanguages
+- supportedModes
+- artifactLocation
+- license
+- status
+- createdAt
+
+### EvaluationExperiment
+
+- id
+- modelId
+- datasetId
+- language
+- sampleCount
+- cer
+- wer
+- averageInferenceTimeMs
+- configuration
+- createdAt
+
+### TrainingJob
+
+- id
+- baseModelId
+- datasetId
+- status
+- configuration
+- logLocation
+- outputArtifactLocation
+- startedAt
+- completedAt
+- errorMessage
+
+### AuditEvent
+
+- id
+- userId
+- action
+- entityType
+- entityId
+- metadata
+- createdAt
+
+Add missing relationships, indexes, constraints, and fields where necessary.
+
+Support nullable historical metadata.
+
+Never invent manuscript authors or dates.
+
+Preserve raw recognition results when users edit transcriptions.
+
+Store original images in persistent storage rather than in ordinary database columns.
+
+Create a separate normalized search representation instead of changing the original transcription.
+
+Provide an ER diagram and database documentation.
+
+## 11. Book Management API
+
+Implement:
+
+- `GET /api/v1/books`
+- `POST /api/v1/books`
+- `GET /api/v1/books/:id`
+- `PATCH /api/v1/books/:id`
+- `DELETE /api/v1/books/:id`
+
+Support:
+
+- Pagination
+- Search by title and author
+- Language filters
+- Sorting
+- Validation
+- Permission checks
+- Appropriate deletion policies
+
+Never silently delete transcription history or related records.
+
+Use transactions when a multi-record operation must be atomic.
+
+## 12. Manuscript Page and Upload API
+
+Implement:
+
+- `GET /api/v1/books/:bookId/pages`
+- `POST /api/v1/books/:bookId/pages`
+- `GET /api/v1/pages/:id`
+- `PATCH /api/v1/pages/:id`
+- `DELETE /api/v1/pages/:id`
+- `GET /api/v1/pages/:id/image`
+
+Support JPEG, PNG, and WebP.
+
+Validate actual file content rather than trusting the supplied MIME type.
+
+Validate file size, image dimensions, and image decodability.
+
+Generate storage filenames on the server.
+
+Calculate a SHA-256 checksum.
+
+Prevent path traversal and arbitrary filesystem writes.
+
+Return image URLs or an authenticated image-access route that the separate frontend can consume.
+
+If protected images are returned through a binary endpoint, document the correct frontend loading approach, including the use of authenticated requests and object URLs where needed.
+
+Do not expose internal filesystem paths.
+
+Do not silently overwrite an existing page image.
+
+Keep the original image unchanged unless an explicit, documented replacement action is performed.
+
+## 13. Recognition and AI Integration
+
+Create an abstraction between NestJS and the Python AI service.
+
+The NestJS backend must not implement the machine-learning model directly.
+
+The AI service must expose its own documented API.
+
+Use a configurable provider:
+
+- `mock`
+- `pretrained`
+- `finetuned`
+
+The mock provider is for testing and local development only. Identify mock output clearly.
+
+Never return fake text as a real model prediction.
+
+### Recognition endpoints
+
+Implement:
+
+- `POST /api/v1/pages/:id/recognition-jobs`
+- `GET /api/v1/recognition-jobs`
+- `GET /api/v1/recognition-jobs/:id`
+- `POST /api/v1/recognition-jobs/:id/cancel` where cancellation is supported
+- `GET /api/v1/pages/:id/transcriptions`
+
+Support:
+
+- Line-level recognition
+- Full-page recognition only if a suitable segmentation workflow exists
+- Language selection
+- Model selection where authorized
+- Job status tracking
+- Model metadata
+- Processing duration
+- Failure reporting
+
+Use these job statuses:
+
+- QUEUED
+- PROCESSING
+- COMPLETED
+- FAILED
+- CANCELLED
+
+Long-running jobs must not block ordinary API requests indefinitely.
+
+Use a simple database-backed job worker or another appropriately scoped mechanism for the first implementation.
+
+Prevent the same queued job from being processed multiple times concurrently.
+
+Handle backend restarts and interrupted jobs safely.
+
+Set request timeouts and handle unavailable AI services.
+
+Save the original model output and model metadata.
+
+Do not fabricate confidence scores.
+
+## 14. Transcription Management
+
+Implement:
+
+- `GET /api/v1/transcriptions/:id`
+- `PATCH /api/v1/transcriptions/:id`
+- `GET /api/v1/transcriptions/:id/revisions`
+- `POST /api/v1/transcriptions/:id/revisions`
+- `POST /api/v1/transcriptions/:id/approve`
+
+Use review states:
+
+- PENDING_REVIEW
+- REVIEWED
+- APPROVED
+
+The correction API must preserve the raw recognition output.
+
+Create a revision when text is changed.
+
+Record the editing user and timestamp.
+
+Prevent unauthorized edits.
+
+Validate the review-status transition rules.
+
+Use a database transaction when updating a transcription and creating its revision.
+
+Implement a conflict-prevention mechanism, such as an updated timestamp or version number, so two researchers cannot silently overwrite one another's changes.
+
+## 15. Advanced Search
+
+Implement:
+
+`GET /api/v1/search`
+
+Support:
+
+- `q`
+- `bookId`
+- `author`
+- `language`
+- `pageNumber`
+- `reviewStatus`
+- `page`
+- `limit`
+- `sortBy`
+- `sortOrder`
+
+Allow combined filters.
+
+Use parameterized queries.
+
+Implement PostgreSQL full-text search and/or trigram search where appropriate.
+
+Account for Persian and Arabic Unicode variations in a separate normalization pipeline.
+
+Investigate normalization of:
+
+- Arabic and Persian Yeh
+- Arabic and Persian Kaf
+- Alef variants
+- Diacritics
+- Tatweel
+- Unicode normalization
+- Whitespace
+
+Do not alter the original manuscript text.
+
+Return results with the matching excerpt, book information, page identifier, folio label, transcription status, and other relevant metadata.
+
+Support pagination.
+
+Enforce authorization so users cannot search content they are not allowed to access.
+
+Test that a corrected transcription becomes searchable after saving.
+
+## 16. Dashboard API
+
+Implement:
+
+`GET /api/v1/dashboard/stats`
+
+Return real values for:
+
+- Total books
+- Total manuscript pages
+- Completed recognition jobs
+- Pending recognition jobs
+- Failed recognition jobs
+- Transcriptions awaiting review
+- Registered dataset samples
+- Available models
+
+Also implement suitable endpoints for recent books, recent jobs, and recent activity if the frontend needs them.
+
+Use actual database queries.
+
+Return zeros for genuinely empty collections.
+
+Never fabricate statistics.
+
+Document the exact response schema.
+
+## 17. Dataset Management
+
+Implement:
+
+- `GET /api/v1/datasets`
+- `POST /api/v1/datasets`
+- `GET /api/v1/datasets/:id`
+- `POST /api/v1/datasets/validate`
+- `GET /api/v1/datasets/:id/samples`
+
+Support CSV manifests with fields such as:
+
+- sample_id
+- image_path
+- transcription
+- language
+- book_id
+- manuscript_id
+- page_number
+- line_id
+- split
+- source
+- license
+- annotation_status
+
+Validate required columns, image paths, UTF-8 text, unique identifiers, supported languages, split names, and missing files.
+
+Return structured validation errors.
+
+Do not assume a real dataset exists.
+
+Do not import external images without checking access rights and licensing.
+
+Prevent manifest paths from accessing arbitrary server files.
+
+Document group-based dataset splitting to reduce leakage between training and test sets.
+
+## 18. Model Registry and Evaluation
+
+Implement:
+
+- `GET /api/v1/models`
+- `GET /api/v1/models/:id`
+- `POST /api/v1/models`
+- `PATCH /api/v1/models/:id/activate`
+- `POST /api/v1/evaluations`
+- `GET /api/v1/evaluations`
+- `GET /api/v1/evaluations/:id`
+
+Model metadata must include the base model, version, language support, recognition modes, license, artifact location, and availability status.
+
+Do not mark a model as available unless its artifacts and provider can actually be initialized.
+
+Evaluation must calculate Character Error Rate and Word Error Rate from real predictions and ground-truth transcriptions.
+
+Record the dataset, language, sample count, model version, evaluation configuration, and timestamp.
+
+Never report CER or WER as generic accuracy.
+
+## 19. Training Jobs
+
+Implement:
+
+- `POST /api/v1/training-jobs`
+- `GET /api/v1/training-jobs`
+- `GET /api/v1/training-jobs/:id`
+- `POST /api/v1/training-jobs/:id/cancel` where supported
+
+Validate:
+
+- Base model
+- Dataset
+- Dataset splits
+- Learning rate
+- Batch size
+- Epoch count
+- Output location
+- Hardware constraints
+
+Run training outside ordinary HTTP request handlers.
+
+Use safe, predefined training scripts rather than arbitrary shell commands supplied by clients.
+
+Track job status, logs, configuration, timestamps, and output artifacts.
+
+Do not automatically activate a newly trained model.
+
+If no dataset or GPU is available, return an explicit error or blocked state and explain the missing requirement.
+
+## 20. Python AI Service
+
+Implement a separately runnable FastAPI application.
+
+Expose:
+
+- `GET /ai/v1/health`
+- `GET /ai/v1/models`
+- `POST /ai/v1/recognize/line`
+- `POST /ai/v1/recognize/page` only when supported
+- `POST /ai/v1/evaluate`
+- Training job endpoints if the selected architecture exposes training through the AI service
+
+Use Pydantic schemas.
+
+Separate model loading, image preprocessing, segmentation, inference, training, and evaluation.
+
+Create a deterministic mock provider for tests.
+
+Investigate pretrained models suitable for Persian and Arabic manuscripts.
+
+Verify model availability, license, tokenizer support, preprocessing requirements, and language coverage.
+
+Do not claim that a generic TrOCR model supports historical Persian or Arabic without verification.
+
+Load the model once per worker where appropriate.
+
+Cache artifacts in persistent storage.
+
+Return explicit errors for missing models, unsupported languages, invalid images, incompatible model configurations, and resource failures.
+
+## 21. Security
+
+Implement:
+
+- Request validation
+- Authentication guards
+- Role-based authorization
+- Password hashing
+- Rate limiting
+- Safe upload handling
+- Safe error responses
+- CORS restrictions
+- Environment-variable validation
+- Audit events
+- Database transactions
+- Secure cookie or token configuration
+- Restrictions on expensive training jobs
+- Protection against arbitrary filesystem access
+- Protection against arbitrary shell execution
+
+Do not expose PostgreSQL publicly by default.
+
+Do not expose internal AI service endpoints to public clients by default.
+
+Do not log passwords, tokens, or manuscript text unnecessarily.
+
+## 22. Tests
+
+Implement unit, integration, and API tests.
+
+Test at least:
+
+- Authentication
+- Authorization
+- Book CRUD
+- Page upload
+- Invalid file rejection
+- Recognition job lifecycle
+- AI service unavailable behavior
+- Mock provider integration
+- Transcription editing
+- Revision history
+- Search and filtering
+- Persian/Arabic normalization
+- Dashboard statistics
+- Dataset validation
+- Evaluation metric calculations
+- Model activation permissions
+- API response schemas
+
+Use an isolated test database.
+
+Never reset a production database in tests.
+
+Provide commands for linting, type checking, tests, and production builds.
+
+## 23. Deployment
+
+Create Dockerfiles and Docker Compose configuration for:
+
+- PostgreSQL
+- NestJS backend
+- Python AI service
+
+Use persistent volumes for database data, uploads, and model artifacts.
+
+Configure health checks.
+
+Use internal Docker networking.
+
+Provide local development instructions that work without Docker where practical.
+
+Support separate startup commands for:
+
+1. PostgreSQL
+2. AI service
+3. Backend
+
+Document the correct `DATABASE_URL` and `AI_SERVICE_URL` for both host-based execution and Docker-based execution.
+
+Explain that `localhost` inside a container refers to that container, not another service.
+
+Do not delete persistent volumes when stopping services.
+
+Provide database backup and restoration commands.
+
+## 24. Required Documentation
+
+Create:
+
+- `README.md`
+- `docs/architecture.md`
+- `docs/API_CONTRACT.md`
+- `docs/database.md`
+- `docs/installation.md`
+- `docs/ai-models.md`
+- `docs/dataset-guide.md`
+- `docs/deployment.md`
+- `docs/security.md`
+- `docs/troubleshooting.md`
+- `docs/IMPLEMENTATION_STATUS.md`
+
+The API contract must contain exact request and response examples for every endpoint.
+
+Include the Swagger URL and instructions for generating TypeScript types for the separate frontend.
+
+Document authentication, CORS, pagination, error codes, file uploads, image retrieval, recognition polling, and all important environment variables.
+
+## 25. Implementation Order
+
+Follow this order:
+
+1. Inspect the workspace.
+2. Initialize the backend repository.
+3. Configure environment validation and logging.
+4. Configure PostgreSQL and Prisma.
+5. Implement authentication and authorization.
+6. Implement books.
+7. Implement page upload and storage.
+8. Implement the Python AI service and mock provider.
+9. Implement recognition jobs.
+10. Implement transcription editing and revisions.
+11. Implement advanced search.
+12. Implement dashboard statistics.
+13. Implement dataset management.
+14. Implement models and evaluations.
+15. Implement training job management.
+16. Add automated tests.
+17. Add Docker configuration.
+18. Run migrations, tests, linting, and builds.
+19. Fix failures.
+20. Finalize API documentation.
+
+Do not stop after producing a plan.
+
+If the implementation is too large for one session, work incrementally and update `docs/IMPLEMENTATION_STATUS.md`.
+
+## 26. Final Acceptance Criteria
+
+The backend is ready for frontend integration when:
+
+- It starts independently.
+- PostgreSQL migrations run successfully.
+- Swagger exposes the actual API contract.
+- Authentication and role checks work.
+- Book CRUD works.
+- Image uploads and retrieval work.
+- Recognition jobs can be created and tracked.
+- Mock inference is clearly identified.
+- Real inference is enabled only when a compatible model is available.
+- Transcription corrections and revisions persist.
+- Corrected text is searchable.
+- Dashboard statistics reflect real database values.
+- Dataset validation works.
+- Evaluation metrics are calculated from actual inputs.
+- The required tests pass or remaining failures are documented.
+- CORS allows the configured standalone frontend origin.
+- The frontend does not need direct database access.
+- All endpoints and response schemas are documented.
+- The project can be run using the README instructions.
+
+At the end, provide the exact backend startup commands, Swagger URL, API base URL, required environment variables, implemented endpoint list, test results, model availability, and known limitations.
+
+Begin by inspecting the workspace and implementing Phase 1. Do not ask for confirmation unless an actual blocking decision is necessary.

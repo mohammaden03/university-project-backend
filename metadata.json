@@ -1,0 +1,6 @@
+{
+  "name": "Manuscript AI — Academic HTR & Manuscript Recognition Platform",
+  "description": "Production-grade backend and academic workbench for Persian and Arabic historical manuscript recognition (HTR/OCR), transcription correction, revision tracking, dataset management, and CER/WER evaluation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

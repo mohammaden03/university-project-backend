@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: manuscript-ai-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app_user
+      POSTGRES_PASSWORD: secure_dev_password_2026
+      POSTGRES_DB: manuscript_ai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_user -d manuscript_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: manuscript-ai-backend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://app_user:secure_dev_password_2026@postgres:5432/manuscript_ai
+      AI_SERVICE_URL: http://ai-service:8000
+      AI_PROVIDER: mock
+      FRONTEND_ORIGIN: http://localhost:5173
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+      JWT_ACCESS_SECRET: secure_production_secret_key_32_chars_min
+      UPLOAD_DIR: /app/storage/uploads
+      MODEL_DIR: /app/storage/models
+    volumes:
+      - uploads_data:/app/storage/uploads
+      - models_data:/app/storage/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ai-service:
+        condition: service_started
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: manuscript-ai-inference
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      AI_PROVIDER: mock
+    volumes:
+      - models_data:/app/storage/models
+
+volumes:
+  pgdata:
+  uploads_data:
+  models_data:
