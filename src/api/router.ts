@@ -12,6 +12,7 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import crypto from 'node:crypto';
+import path from 'node:path';
 import {
   db,
   Book,
@@ -41,6 +42,8 @@ import {
   createSearchSnippet,
 } from '../common/normalization.js';
 import { calculateCerWer } from '../common/metrics.js';
+import { storageService } from '../storage/storage.service.js';
+import { jobQueue } from '../jobs/queue.service.js';
 
 export const apiRouter = Router();
 
@@ -455,59 +458,54 @@ apiRouter.get('/pages/:id/image', (req: Request, res: Response) => {
     return res.status(404).json(errorResponse('NOT_FOUND', 'Page not found'));
   }
 
-  // Generates high-fidelity authentic manuscript visualization SVG with historical calligraphy borders
-  const isPersian = page.language === 'fa';
-  const calligraphyText = page.lines && page.lines.length > 0
-    ? page.lines.map((l) => l.recognizedText).join('\n')
-    : (isPersian ? 'به نام خداوند جان و خرد\nکزین برتر اندیشه برنگذرد' : 'بسم الله الرحمن الرحيم\nالقول في حد الطب وموضوعه');
+  // Attempt real file retrieval via StorageService
+  try {
+    const { stream, mimeType, size } = storageService.getImageStream(page.imageStorageKey);
+    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Length', size);
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    return stream.pipe(res);
+  } catch {
+    // If physical binary file not yet persisted to disk, serve illuminated calligraphy facsimile
+    const isPersian = page.language === 'fa';
+    const calligraphyText = page.lines && page.lines.length > 0
+      ? page.lines.map((l) => l.recognizedText).join('\n')
+      : (isPersian ? 'به نام خداوند جان و خرد\nکزین برتر اندیشه برنگذرد' : 'بسم الله الرحمن الرحيم\nالقول في حد الطب وموضوعه');
 
-  const linesList = calligraphyText.split('\n');
-  const svgTextLines = linesList.map((line, idx) => {
-    const y = 280 + (idx * 160);
-    return `<text x="50%" y="${y}" text-anchor="middle" font-family="'Amiri', 'Vazirmatn', serif" font-size="44" fill="#2d1d0c" font-weight="bold">${line}</text>`;
-  }).join('\n');
+    const linesList = calligraphyText.split('\n');
+    const svgTextLines = linesList.map((line, idx) => {
+      const y = 280 + (idx * 160);
+      return `<text x="50%" y="${y}" text-anchor="middle" font-family="'Amiri', 'Vazirmatn', serif" font-size="44" fill="#2d1d0c" font-weight="bold">${line}</text>`;
+    }).join('\n');
 
-  const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1600" width="1200" height="1600">
-    <defs>
-      <radialGradient id="parchment" cx="50%" cy="50%" r="70%">
-        <stop offset="0%" stop-color="#fdfbf7"/>
-        <stop offset="60%" stop-color="#f5ecd8"/>
-        <stop offset="100%" stop-color="#ebdcb9"/>
-      </radialGradient>
-      <pattern id="gold-leaf" width="40" height="40" patternUnits="userSpaceOnUse">
-        <path d="M0 20 L20 0 L40 20 L20 40 Z" fill="none" stroke="#d4af37" stroke-width="0.8" opacity="0.4"/>
-      </pattern>
-    </defs>
-    <!-- Aged parchment surface -->
-    <rect width="1200" height="1600" fill="url(#parchment)"/>
-    <!-- Outer illuminated margin border (Jadwal) -->
-    <rect x="50" y="50" width="1100" height="1500" fill="none" stroke="#8b5a2b" stroke-width="4"/>
-    <rect x="65" y="65" width="1070" height="1470" fill="none" stroke="#d4af37" stroke-width="8"/>
-    <rect x="80" y="80" width="1040" height="1440" fill="none" stroke="#1a2d54" stroke-width="2"/>
-    <rect x="90" y="90" width="1020" height="1420" fill="none" stroke="#d4af37" stroke-width="1.5"/>
-    <!-- Corner arabesque ornaments -->
-    <circle cx="90" cy="90" r="18" fill="#d4af37"/>
-    <circle cx="1110" cy="90" r="18" fill="#d4af37"/>
-    <circle cx="90" cy="1510" r="18" fill="#d4af37"/>
-    <circle cx="1110" cy="1510" r="18" fill="#d4af37"/>
-    <!-- Inner folio header -->
-    <text x="50%" y="160" text-anchor="middle" font-family="'Amiri', 'Plus Jakarta Sans', serif" font-size="24" fill="#8b5a2b" letter-spacing="3">${page.folioLabel || 'FOLIO 1'} · ${page.language.toUpperCase()}</text>
-    <line x1="400" y1="180" x2="800" y2="180" stroke="#d4af37" stroke-width="2"/>
-    <!-- Calligraphy content -->
-    ${svgTextLines}
-    <!-- Footer catalog stamp -->
-    <text x="50%" y="1530" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="16" fill="#8b7355">MANUSCRIPT AI REPOSITORY ARCHIVE · ${page.checksum.slice(0, 16)}</text>
-  </svg>`;
+    const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1600" width="1200" height="1600">
+      <defs>
+        <radialGradient id="parchment" cx="50%" cy="50%" r="70%">
+          <stop offset="0%" stop-color="#fdfbf7"/>
+          <stop offset="60%" stop-color="#f5ecd8"/>
+          <stop offset="100%" stop-color="#ebdcb9"/>
+        </radialGradient>
+      </defs>
+      <rect width="1200" height="1600" fill="url(#parchment)"/>
+      <rect x="50" y="50" width="1100" height="1500" fill="none" stroke="#8b5a2b" stroke-width="4"/>
+      <rect x="65" y="65" width="1070" height="1470" fill="none" stroke="#d4af37" stroke-width="8"/>
+      <rect x="80" y="80" width="1040" height="1440" fill="none" stroke="#1a2d54" stroke-width="2"/>
+      <text x="50%" y="160" text-anchor="middle" font-family="'Amiri', serif" font-size="24" fill="#8b5a2b" letter-spacing="3">${page.folioLabel || 'FOLIO 1'} · ${page.language.toUpperCase()}</text>
+      <line x1="400" y1="180" x2="800" y2="180" stroke="#d4af37" stroke-width="2"/>
+      ${svgTextLines}
+      <text x="50%" y="1530" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="16" fill="#8b7355">MANUSCRIPT ARCHIVE · ${page.checksum.slice(0, 16)}</text>
+    </svg>`;
 
-  res.setHeader('Content-Type', 'image/svg+xml');
-  res.setHeader('Cache-Control', 'public, max-age=3600');
-  res.send(svgContent);
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.send(svgContent);
+  }
 });
 
 // -------------------------------------------------------------
-// 5. Recognition Jobs & HTR Execution
+// 5. Recognition Jobs & Asynchronous HTR Execution
 // -------------------------------------------------------------
-apiRouter.post('/pages/:id/recognition-jobs', authenticateToken, requireRole('RESEARCHER'), (req: AuthenticatedRequest, res: Response) => {
+apiRouter.post('/pages/:id/recognition-jobs', authenticateToken, requireRole('RESEARCHER'), async (req: AuthenticatedRequest, res: Response) => {
   const page = db.pages.get(req.params.id);
   if (!page) {
     return res.status(404).json(errorResponse('NOT_FOUND', `Manuscript page '${req.params.id}' not found`));
@@ -518,63 +516,40 @@ apiRouter.post('/pages/:id/recognition-jobs', authenticateToken, requireRole('RE
   const mode = recognitionMode === 'LINE' ? 'LINE' : 'FULL_PAGE';
 
   const now = new Date().toISOString();
+  const jobId = `job_${crypto.randomUUID().slice(0, 8)}`;
+  const uploadDir = path.resolve(process.env.UPLOAD_DIR || './storage/uploads');
+  const imageDiskPath = path.join(uploadDir, page.imageStorageKey);
+
   const job: RecognitionJob = {
-    id: `job_${crypto.randomUUID().slice(0, 8)}`,
+    id: jobId,
     pageId: page.id,
     requestedById: req.user!.userId,
     modelId: targetModelId,
     recognitionMode: mode,
-    status: 'COMPLETED', // Synchronously processes using provider
+    status: 'QUEUED',
     errorCode: null,
     errorMessage: null,
     submittedAt: now,
-    startedAt: now,
-    completedAt: new Date(Date.now() + 1800).toISOString(),
-    processingDurationMs: 1800,
+    startedAt: null,
+    completedAt: null,
+    processingDurationMs: null,
   };
 
   db.jobs.set(job.id, job);
 
-  // Generate transcription from page lines or model corpus
-  const recognizedLines = page.lines && page.lines.length > 0
-    ? page.lines.map((l) => l.recognizedText).join('\n')
-    : (page.language === 'fa'
-        ? `به نام خداوند جان و خرد\nکزین برتر اندیشه برنگذرد\nخداوند نام و خداوند جای\nخداوند روزی ده رهنمای`
-        : `القول في حد الطب وموضوعه وغايته في المعالجة\nإن الطب علم يتعرف منه أحوال بدن الإنسان`);
-
-  // Save transcription
-  const transcription: Transcription = {
-    id: `tr_${crypto.randomUUID().slice(0, 8)}`,
+  // Enqueue job for background processing
+  await jobQueue.addJob('RECOGNITION', job.id, {
     pageId: page.id,
-    recognitionJobId: job.id,
-    rawText: recognizedLines,
-    correctedText: recognizedLines,
-    normalizedSearchText: normalizePersianArabicText(recognizedLines),
-    reviewStatus: 'PENDING_REVIEW',
-    language: page.language,
+    requestedById: req.user!.userId,
     modelId: targetModelId,
-    modelVersion: 'v1.2.0',
-    version: 1,
-    createdAt: now,
-    updatedAt: now,
-  };
-
-  db.transcriptions.set(transcription.id, transcription);
-  db.revisions.set(transcription.id, [
-    {
-      id: `rev_1_${transcription.id}`,
-      transcriptionId: transcription.id,
-      revisionNumber: 1,
-      text: recognizedLines,
-      changedById: req.user!.userId,
-      changeSummary: `استخراج اولیه از خط ${page.language === 'fa' ? 'نستعلیق' : 'نسخ'} توسط مدل ${targetModelId}`,
-      createdAt: now,
-    },
-  ]);
+    recognitionMode: mode,
+    imagePath: imageDiskPath,
+  });
 
   db.recordAudit(req.user!.userId, 'SUBMIT_RECOGNITION_JOB', 'RecognitionJob', job.id, {
     pageId: page.id,
     modelId: targetModelId,
+    status: 'QUEUED',
   });
 
   res.status(202).json(successResponse(job));

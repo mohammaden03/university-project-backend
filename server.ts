@@ -1,22 +1,25 @@
 /**
- * Manuscript AI - Core Full-Stack Application Server
+ * Manuscript AI - Core Backend Application Server
  *
- * Implements:
- * - Express REST API under /api/v1/*
- * - OpenAPI 3.0 JSON specification at /api/docs-json
- * - Interactive Swagger UI documentation at /api/docs
- * - Strict CORS policy for independent React frontend consumption
- * - Vite middleware integration for live browser preview
- * - Structured request logging & error handling
+ * Implements a standalone NestJS/Express REST API:
+ * - Completely decoupled from frontend: zero Vite middleware or React serving
+ * - Redirects root (/) directly to Swagger API Documentation (/api/docs)
+ * - Exposes OpenAPI 3.0 specification at /api/docs-json
+ * - Background queue processor integration for asynchronous HTR recognition jobs
+ * - Comprehensive CORS configuration for independent React frontends
  */
 
 import express, { Request, Response, NextFunction } from 'express';
-import { createServer as createViteServer } from 'vite';
 import path from 'node:path';
 import fs from 'node:fs';
 import { apiRouter } from './src/api/router.js';
 import { openApiSpecification, renderSwaggerHtml } from './src/docs/openapi.js';
 import { errorResponse } from './src/common/response.js';
+import { prisma } from './src/database/prisma.service.js';
+import { jobQueue } from './src/jobs/queue.service.js';
+import { aiClient } from './src/recognition/ai-client.service.js';
+import { db } from './src/database/store.js';
+import { normalizePersianArabicText } from './src/common/normalization.js';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -52,7 +55,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   next();
 });
 
-// Request logger for development & debugging
+// Request logger
 app.use((req: Request, res: Response, next: NextFunction) => {
   const start = Date.now();
   res.on('finish', () => {
@@ -62,6 +65,11 @@ app.use((req: Request, res: Response, next: NextFunction) => {
     }
   });
   next();
+});
+
+// Redirect root to Swagger API Documentation
+app.get('/', (req: Request, res: Response) => {
+  res.redirect('/api/docs');
 });
 
 // Swagger & OpenAPI endpoints
@@ -93,37 +101,97 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   res.status(status).json(errorResponse(code, message, details));
 });
 
-// Initialize server with Vite middleware in development
+// Register background HTR recognition worker
+jobQueue.registerProcessor('RECOGNITION', async (job) => {
+  const { pageId, requestedById, modelId, recognitionMode, imagePath } = job.data as {
+    pageId: string;
+    requestedById: string;
+    modelId: string;
+    recognitionMode: string;
+    imagePath: string;
+  };
+  const page = db.pages.get(pageId);
+  const language = page?.language || 'fa';
+
+  console.log(`[JobQueue] Processing HTR job ${job.id} for page ${pageId} (Mode: ${recognitionMode}, Model: ${modelId})`);
+
+  // Invoke AI service client
+  const result = await aiClient.recognizePage(imagePath, language, modelId);
+
+  // Update in-memory and database records
+  const dbJob = db.jobs.get(job.id);
+  if (dbJob) {
+    dbJob.status = 'COMPLETED';
+    dbJob.completedAt = new Date().toISOString();
+    dbJob.processingDurationMs = result.durationMs;
+  }
+
+  // Create or update transcription
+  const now = new Date().toISOString();
+  let transcription = Array.from(db.transcriptions.values()).find((t) => t.pageId === pageId);
+
+  if (!transcription) {
+    transcription = {
+      id: `tr_${pageId.replace('pg_', '')}`,
+      pageId,
+      recognitionJobId: job.id,
+      rawText: result.text,
+      correctedText: result.text,
+      normalizedSearchText: normalizePersianArabicText(result.text),
+      reviewStatus: 'PENDING_REVIEW',
+      language,
+      modelId: result.modelId,
+      modelVersion: result.modelVersion,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+    };
+    db.transcriptions.set(transcription.id, transcription);
+  } else {
+    transcription.rawText = result.text;
+    transcription.correctedText = result.text;
+    transcription.normalizedSearchText = normalizePersianArabicText(result.text);
+    transcription.modelId = result.modelId;
+    transcription.modelVersion = result.modelVersion;
+    transcription.updatedAt = now;
+  }
+
+  // Record initial revision
+  const revisionsList = db.revisions.get(transcription.id) || [];
+  revisionsList.push({
+    id: `rev_${revisionsList.length + 1}_${transcription.id}`,
+    transcriptionId: transcription.id,
+    revisionNumber: revisionsList.length + 1,
+    text: result.text,
+    changedById: requestedById,
+    changeSummary: `Automatic HTR recognition (${result.isMock ? 'Mock Provider' : result.modelId})`,
+    createdAt: now,
+  });
+  db.revisions.set(transcription.id, revisionsList);
+
+  return result;
+});
+
+// Initialize server
 async function bootstrap() {
   // Ensure storage directories exist
-  const uploadDir = process.env.UPLOAD_DIR || './storage/uploads';
-  const modelDir = process.env.MODEL_DIR || './storage/models';
+  const uploadDir = path.resolve(process.env.UPLOAD_DIR || './storage/uploads');
+  const modelDir = path.resolve(process.env.MODEL_DIR || './storage/models');
   fs.mkdirSync(uploadDir, { recursive: true });
+  fs.mkdirSync(path.join(uploadDir, 'folios'), { recursive: true });
   fs.mkdirSync(modelDir, { recursive: true });
 
-  const isProduction = process.env.NODE_ENV === 'production';
-
-  if (!isProduction) {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
-  } else {
-    app.use(express.static('dist'));
-    app.get('*', (req: Request, res: Response) => {
-      res.sendFile(path.resolve('dist/index.html'));
-    });
-  }
+  // Connect Prisma if PostgreSQL is available
+  await prisma.onModuleInit();
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`====================================================`);
-    console.log(` Manuscript AI Backend is running on port ${PORT}`);
-    console.log(` REST API Base: http://localhost:${PORT}/api/v1`);
+    console.log(` Manuscript AI Standalone Backend running on port ${PORT}`);
+    console.log(` Base API:      http://localhost:${PORT}/api/v1`);
     console.log(` Swagger Docs:  http://localhost:${PORT}/api/docs`);
     console.log(` OpenAPI Spec:  http://localhost:${PORT}/api/docs-json`);
     console.log(` Health Check:  http://localhost:${PORT}/api/v1/health`);
-    console.log(` Allowed CORS:  ${allowedOrigins.join(', ')}`);
+    console.log(` Frontend CORS: ${allowedOrigins.join(', ')}`);
     console.log(`====================================================`);
   });
 }

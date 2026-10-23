@@ -2,19 +2,24 @@
  * Manuscript AI - Core Unit & Integration Test Suite
  *
  * Runs with Node's native test runner (via `tsx --test`).
- * Tests:
+ * Comprehensive test coverage:
  * 1. Persian and Arabic Unicode text normalization pipeline
  * 2. Character Error Rate (CER) and Word Error Rate (WER) metrics
  * 3. Authentication hashing, timing-safe validation, and JWT verification
- * 4. Optimistic concurrency conflict detection in transcription editing
- * 5. Dataset manifest validation and path traversal defenses
+ * 4. Role-based access control (ADMIN, RESEARCHER, VIEWER) permissions
+ * 5. StorageService: Magic bytes validation, dimension parsing, and path traversal rejection
+ * 6. Asynchronous JobQueue lifecycle and cancellation
+ * 7. Optimistic concurrency conflict detection in transcription editing
+ * 8. Search snippet extraction around normalized Persian/Arabic queries
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePersianArabicText, createSearchSnippet } from '../common/normalization.js';
-import { calculateCerWer, computeLevenshtein } from '../common/metrics.js';
-import { hashPassword, verifyPassword, signJwtToken, verifyJwtToken } from '../common/auth.js';
+import { calculateCerWer } from '../common/metrics.js';
+import { hashPassword, verifyPassword, signJwtToken, verifyJwtToken, hasRolePermission } from '../common/auth.js';
+import { StorageService } from '../storage/storage.service.js';
+import { JobQueueService } from '../jobs/queue.service.js';
 
 test('Normalization: Unifies Arabic and Persian Yeh characters', () => {
   const arabicYeh = 'علي بن ابي طالب'; // with Arabic Yeh \u064A
@@ -100,6 +105,68 @@ test('Auth: Signs and verifies JWT tokens with role claims', () => {
   // Tampered token test
   const tamperedToken = token.slice(0, -4) + 'abcd';
   assert.equal(verifyJwtToken(tamperedToken), null);
+});
+
+test('RBAC: Enforces role hierarchy between ADMIN, RESEARCHER, and VIEWER', () => {
+  assert.equal(hasRolePermission('ADMIN', 'RESEARCHER'), true);
+  assert.equal(hasRolePermission('ADMIN', 'VIEWER'), true);
+  assert.equal(hasRolePermission('RESEARCHER', 'RESEARCHER'), true);
+  assert.equal(hasRolePermission('RESEARCHER', 'ADMIN'), false);
+  assert.equal(hasRolePermission('VIEWER', 'RESEARCHER'), false);
+});
+
+test('Storage: Detects valid magic bytes and rejects invalid binaries', () => {
+  const storage = new StorageService();
+
+  // Valid PNG magic bytes
+  const pngHeader = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+  assert.equal(storage.detectMagicBytes(pngHeader)?.mimeType, 'image/png');
+
+  // Valid JPEG magic bytes
+  const jpegHeader = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+  assert.equal(storage.detectMagicBytes(jpegHeader)?.mimeType, 'image/jpeg');
+
+  // Invalid binary payload (e.g. bash script or plain text)
+  const invalidBuffer = Buffer.from('NOT_AN_IMAGE_FILE_HEADER_TEXT');
+  assert.equal(storage.detectMagicBytes(invalidBuffer), null);
+});
+
+test('Storage: Rejects path traversal attempts in image retrieval', () => {
+  const storage = new StorageService();
+  assert.throws(() => {
+    storage.getImageStream('../../../etc/passwd');
+  }, /path traversal/i);
+
+  assert.throws(() => {
+    storage.getImageStream('/etc/shadow');
+  }, /path traversal/i);
+});
+
+test('JobQueue: Enqueues and processes asynchronous background job', async () => {
+  const queue = new JobQueueService();
+  let processed = false;
+
+  queue.registerProcessor('RECOGNITION', async (job) => {
+    processed = true;
+    return { recognizedText: 'Test HTR Result' };
+  });
+
+  const job = await queue.addJob('RECOGNITION', 'job_test_01', { pageId: 'pg_01' });
+  assert.equal(job.status, 'QUEUED');
+
+  // Wait briefly for queue loop tick
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(processed, true);
+  assert.equal(job.status, 'COMPLETED');
+  assert.ok(typeof job.processingDurationMs === 'number');
+});
+
+test('JobQueue: Allows cancelling a queued job', async () => {
+  const queue = new JobQueueService();
+  const job = await queue.addJob('TRAINING', 'job_cancel_01', { datasetId: 'ds_01' });
+  const cancelled = queue.cancelJob('job_cancel_01');
+  assert.equal(cancelled, true);
+  assert.equal(job.status, 'CANCELLED');
 });
 
 test('Search: Creates matched snippet around normalized query', () => {
