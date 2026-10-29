@@ -129,6 +129,101 @@
       "author": "Jalal al-Din Muhammad Rumi (مولانا جلال‌الدین بلخی)",
       "language": "fa",
       "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_test_1793286645063",
+      "createdAt": "2026-10-29T15:10:45.063Z",
+      "updatedAt": "2026-10-29T15:10:45.063Z",
+      "title": "Tazkirat al-Awliya (تذکرة الاولیاء)",
+      "author": "Attar of Nishapur (عطار نیشابوری)",
+      "language": "fa",
+      "description": "Biographies of early Sufi mystics in classical Persian prose.",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_restart_1793286645066",
+      "createdAt": "2026-10-29T15:10:45.066Z",
+      "updatedAt": "2026-10-29T15:10:45.066Z",
+      "title": "Masnavi-ye Ma'navi (مثنوی معنوی)",
+      "author": "Jalal al-Din Muhammad Rumi (مولانا جلال‌الدین بلخی)",
+      "language": "fa",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_test_1793287078822",
+      "createdAt": "2026-10-29T15:17:58.822Z",
+      "updatedAt": "2026-10-29T15:17:58.822Z",
+      "title": "Tazkirat al-Awliya (تذکرة الاولیاء)",
+      "author": "Attar of Nishapur (عطار نیشابوری)",
+      "language": "fa",
+      "description": "Biographies of early Sufi mystics in classical Persian prose.",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_restart_1793287078824",
+      "createdAt": "2026-10-29T15:17:58.824Z",
+      "updatedAt": "2026-10-29T15:17:58.824Z",
+      "title": "Masnavi-ye Ma'navi (مثنوی معنوی)",
+      "author": "Jalal al-Din Muhammad Rumi (مولانا جلال‌الدین بلخی)",
+      "language": "fa",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_test_1793287094082",
+      "createdAt": "2026-10-29T15:18:14.083Z",
+      "updatedAt": "2026-10-29T15:18:14.083Z",
+      "title": "Tazkirat al-Awliya (تذکرة الاولیاء)",
+      "author": "Attar of Nishapur (عطار نیشابوری)",
+      "language": "fa",
+      "description": "Biographies of early Sufi mystics in classical Persian prose.",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_restart_1793287094085",
+      "createdAt": "2026-10-29T15:18:14.085Z",
+      "updatedAt": "2026-10-29T15:18:14.085Z",
+      "title": "Masnavi-ye Ma'navi (مثنوی معنوی)",
+      "author": "Jalal al-Din Muhammad Rumi (مولانا جلال‌الدین بلخی)",
+      "language": "fa",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_test_1793287111911",
+      "createdAt": "2026-10-29T15:18:31.911Z",
+      "updatedAt": "2026-10-29T15:18:31.911Z",
+      "title": "Tazkirat al-Awliya (تذکرة الاولیاء)",
+      "author": "Attar of Nishapur (عطار نیشابوری)",
+      "language": "fa",
+      "description": "Biographies of early Sufi mystics in classical Persian prose.",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_restart_1793287111913",
+      "createdAt": "2026-10-29T15:18:31.913Z",
+      "updatedAt": "2026-10-29T15:18:31.913Z",
+      "title": "Masnavi-ye Ma'navi (مثنوی معنوی)",
+      "author": "Jalal al-Din Muhammad Rumi (مولانا جلال‌الدین بلخی)",
+      "language": "fa",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_test_1793287191130",
+      "createdAt": "2026-10-29T15:19:51.131Z",
+      "updatedAt": "2026-10-29T15:19:51.131Z",
+      "title": "Tazkirat al-Awliya (تذکرة الاولیاء)",
+      "author": "Attar of Nishapur (عطار نیشابوری)",
+      "language": "fa",
+      "description": "Biographies of early Sufi mystics in classical Persian prose.",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_restart_1793287191133",
+      "createdAt": "2026-10-29T15:19:51.133Z",
+      "updatedAt": "2026-10-29T15:19:51.133Z",
+      "title": "Masnavi-ye Ma'navi (مثنوی معنوی)",
+      "author": "Jalal al-Din Muhammad Rumi (مولانا جلال‌الدین بلخی)",
+      "language": "fa",
+      "createdById": "usr_admin_001"
     }
   ],
   "manuscriptPages": [
@@ -262,6 +357,66 @@
       "version": 2,
       "createdAt": "2026-10-29T14:48:25.976Z",
       "updatedAt": "2026-10-29T14:48:25.977Z",
+      "pageId": "pg_test_concurrency",
+      "rawText": "متن نخستین",
+      "correctedText": "ویرایش پژوهشگر اول",
+      "normalizedSearchText": "ویرایش پژوهشگر اول",
+      "reviewStatus": "PENDING_REVIEW",
+      "language": "fa"
+    },
+    {
+      "id": "tr_concurrency_1793286645064",
+      "version": 2,
+      "createdAt": "2026-10-29T15:10:45.064Z",
+      "updatedAt": "2026-10-29T15:10:45.065Z",
+      "pageId": "pg_test_concurrency",
+      "rawText": "متن نخستین",
+      "correctedText": "ویرایش پژوهشگر اول",
+      "normalizedSearchText": "ویرایش پژوهشگر اول",
+      "reviewStatus": "PENDING_REVIEW",
+      "language": "fa"
+    },
+    {
+      "id": "tr_concurrency_1793287078823",
+      "version": 2,
+      "createdAt": "2026-10-29T15:17:58.823Z",
+      "updatedAt": "2026-10-29T15:17:58.824Z",
+      "pageId": "pg_test_concurrency",
+      "rawText": "متن نخستین",
+      "correctedText": "ویرایش پژوهشگر اول",
+      "normalizedSearchText": "ویرایش پژوهشگر اول",
+      "reviewStatus": "PENDING_REVIEW",
+      "language": "fa"
+    },
+    {
+      "id": "tr_concurrency_1793287094084",
+      "version": 2,
+      "createdAt": "2026-10-29T15:18:14.084Z",
+      "updatedAt": "2026-10-29T15:18:14.084Z",
+      "pageId": "pg_test_concurrency",
+      "rawText": "متن نخستین",
+      "correctedText": "ویرایش پژوهشگر اول",
+      "normalizedSearchText": "ویرایش پژوهشگر اول",
+      "reviewStatus": "PENDING_REVIEW",
+      "language": "fa"
+    },
+    {
+      "id": "tr_concurrency_1793287111912",
+      "version": 2,
+      "createdAt": "2026-10-29T15:18:31.912Z",
+      "updatedAt": "2026-10-29T15:18:31.912Z",
+      "pageId": "pg_test_concurrency",
+      "rawText": "متن نخستین",
+      "correctedText": "ویرایش پژوهشگر اول",
+      "normalizedSearchText": "ویرایش پژوهشگر اول",
+      "reviewStatus": "PENDING_REVIEW",
+      "language": "fa"
+    },
+    {
+      "id": "tr_concurrency_1793287191132",
+      "version": 2,
+      "createdAt": "2026-10-29T15:19:51.132Z",
+      "updatedAt": "2026-10-29T15:19:51.133Z",
       "pageId": "pg_test_concurrency",
       "rawText": "متن نخستین",
       "correctedText": "ویرایش پژوهشگر اول",
@@ -409,6 +564,18 @@
   ],
   "trainingJobs": [],
   "auditEvents": [
+    {
+      "id": "aud_1793287149361",
+      "createdAt": "2026-10-29T15:19:09.361Z",
+      "userId": "usr_researcher_002",
+      "action": "USER_LOGIN",
+      "entityType": "User",
+      "entityId": "usr_researcher_002",
+      "metadata": {
+        "ip": "127.0.0.1",
+        "userAgent": "curl/7.88.1"
+      }
+    },
     {
       "id": "aud_1793285346068",
       "createdAt": "2026-10-29T14:49:06.068Z",

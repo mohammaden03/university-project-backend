@@ -224,6 +224,23 @@ export class StorageService {
       size: stat.size,
     };
   }
+
+  /**
+   * Safely deletes stored image file to clean up orphan files on database failure
+   */
+  public async removeImage(storageKey: string): Promise<boolean> {
+    try {
+      if (storageKey.includes('..') || path.isAbsolute(storageKey)) return false;
+      const fullPath = path.resolve(this.uploadDir, storageKey);
+      if (fullPath.startsWith(this.uploadDir) && fs.existsSync(fullPath)) {
+        await fs.promises.unlink(fullPath);
+        return true;
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  }
 }
 
 export const storageService = new StorageService();

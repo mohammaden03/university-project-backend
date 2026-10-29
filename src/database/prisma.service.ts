@@ -228,6 +228,18 @@ export class PrismaService {
           if (args.where.language && args.where.language !== 'all') {
             items = items.filter((b) => b.language === args.where.language);
           }
+          if (args.where.search) {
+            const q = String(args.where.search).toLowerCase();
+            items = items.filter((b) =>
+              (b.title && b.title.toLowerCase().includes(q)) ||
+              (b.author && b.author.toLowerCase().includes(q)) ||
+              (b.description && b.description.toLowerCase().includes(q)) ||
+              (b.manuscriptIdentifier && b.manuscriptIdentifier.toLowerCase().includes(q))
+            );
+          }
+        }
+        if (args?.orderBy?.createdAt === 'desc') {
+          items.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
         }
         if (args?.skip) items = items.slice(args.skip);
         if (args?.take) items = items.slice(0, args.take);
@@ -244,6 +256,15 @@ export class PrismaService {
         let items = [...this.fallbackData.books];
         if (args.where.language && args.where.language !== 'all') {
           items = items.filter((b) => b.language === args.where.language);
+        }
+        if (args.where.search) {
+          const q = String(args.where.search).toLowerCase();
+          items = items.filter((b) =>
+            (b.title && b.title.toLowerCase().includes(q)) ||
+            (b.author && b.author.toLowerCase().includes(q)) ||
+            (b.description && b.description.toLowerCase().includes(q)) ||
+            (b.manuscriptIdentifier && b.manuscriptIdentifier.toLowerCase().includes(q))
+          );
         }
         return items.length;
       },

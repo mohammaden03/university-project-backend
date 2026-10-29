@@ -19,7 +19,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { normalizePersianArabicText, createSearchSnippet } from '../common/normalization.js';
 import { calculateCerWer } from '../common/metrics.js';
-import { hashPassword, verifyPassword, signJwtToken, verifyJwtToken, hasRolePermission } from '../common/auth.js';
+import {
+  hashPassword,
+  verifyPassword,
+  signJwtToken,
+  verifyJwtToken,
+  hasRolePermission,
+  createRefreshToken,
+  verifyAndRotateRefreshToken,
+  revokeToken,
+  revokeRefreshToken,
+  checkLoginRateLimit,
+  recordFailedLogin,
+  recordSuccessfulLogin,
+} from '../common/auth.js';
+import { createCorsMiddleware, parseAllowedOrigins } from '../common/cors.js';
 import { StorageService } from '../storage/storage.service.js';
 import { JobQueueService } from '../jobs/queue.service.js';
 import { prisma, PrismaService } from '../database/prisma.service.js';
@@ -287,4 +301,203 @@ test('Prisma Persistence: Survives simulated process restart and maintains data'
 
   assert.ok(retrievedAfterRestart, 'Data must survive backend restart and load from disk persistence');
   assert.equal(retrievedAfterRestart.title, 'Masnavi-ye Ma\'navi (مثنوی معنوی)');
+});
+
+// -------------------------------------------------------------
+// CORS Security Specification Tests
+// -------------------------------------------------------------
+test('CORS: Permitted origin sets matching Access-Control-Allow-Origin, credentials and Vary', () => {
+  const allowed = ['http://localhost:5173', 'http://localhost:3000'];
+  const corsMiddleware = createCorsMiddleware(allowed);
+
+  const req: any = {
+    headers: { origin: 'http://localhost:5173' },
+    method: 'GET',
+  };
+  const headersSet: Record<string, string> = {};
+  const res: any = {
+    setHeader: (k: string, v: string) => { headersSet[k] = v; },
+    status: () => res,
+    end: () => {},
+  };
+
+  let nextCalled = false;
+  corsMiddleware(req, res, () => { nextCalled = true; });
+
+  assert.equal(nextCalled, true);
+  assert.equal(headersSet['Vary'], 'Origin');
+  assert.equal(headersSet['Access-Control-Allow-Origin'], 'http://localhost:5173');
+  assert.equal(headersSet['Access-Control-Allow-Credentials'], 'true');
+});
+
+test('CORS: Disallowed origin does NOT receive Access-Control-Allow-Origin or credentials', () => {
+  const allowed = ['http://localhost:5173', 'http://localhost:3000'];
+  const corsMiddleware = createCorsMiddleware(allowed);
+
+  const req: any = {
+    headers: { origin: 'http://malicious-site.com' },
+    method: 'GET',
+  };
+  const headersSet: Record<string, string> = {};
+  const res: any = {
+    setHeader: (k: string, v: string) => { headersSet[k] = v; },
+    status: () => res,
+    end: () => {},
+  };
+
+  let nextCalled = false;
+  corsMiddleware(req, res, () => { nextCalled = true; });
+
+  assert.equal(nextCalled, true);
+  assert.equal(headersSet['Vary'], 'Origin');
+  assert.equal(headersSet['Access-Control-Allow-Origin'], undefined);
+  assert.equal(headersSet['Access-Control-Allow-Credentials'], undefined);
+});
+
+test('CORS: Preflight OPTIONS from disallowed origin returns HTTP 403 Forbidden', () => {
+  const allowed = ['http://localhost:5173'];
+  const corsMiddleware = createCorsMiddleware(allowed);
+
+  const req: any = {
+    headers: { origin: 'http://unauthorized.org' },
+    method: 'OPTIONS',
+  };
+  let statusCode = 200;
+  let jsonBody: any = null;
+  const res: any = {
+    setHeader: () => {},
+    status: (code: number) => {
+      statusCode = code;
+      return {
+        json: (data: any) => { jsonBody = data; },
+      };
+    },
+  };
+
+  corsMiddleware(req, res, () => {});
+
+  assert.equal(statusCode, 403);
+  assert.equal(jsonBody?.success, false);
+  assert.equal(jsonBody?.error?.code, 'CORS_FORBIDDEN');
+});
+
+test('CORS: Wildcard mode does NOT combine wildcard * with credentials', () => {
+  const corsMiddleware = createCorsMiddleware(['*']);
+
+  const req: any = {
+    headers: { origin: 'http://example.com' },
+    method: 'GET',
+  };
+  const headersSet: Record<string, string> = {};
+  const res: any = {
+    setHeader: (k: string, v: string) => { headersSet[k] = v; },
+    status: () => res,
+    end: () => {},
+  };
+
+  corsMiddleware(req, res, () => {});
+
+  assert.equal(headersSet['Access-Control-Allow-Origin'], '*');
+  assert.equal(headersSet['Access-Control-Allow-Credentials'], undefined, 'Wildcard MUST NEVER include credentials');
+});
+
+// -------------------------------------------------------------
+// Authentication Token Rotation & Blacklist Revocation Tests
+// -------------------------------------------------------------
+test('Auth: Refresh tokens support rotation and detect reuse attempts', () => {
+  const userId = 'usr_test_rotation_01';
+  const initial = createRefreshToken(userId);
+
+  assert.ok(initial.token.startsWith('rf_'));
+  assert.ok(initial.expiresAt > Math.floor(Date.now() / 1000));
+
+  // Rotate token: exchanges old token for a new token
+  const rotationResult = verifyAndRotateRefreshToken(initial.token);
+  assert.equal(rotationResult.success, true);
+  assert.equal(rotationResult.userId, userId);
+  assert.ok(rotationResult.newRefreshToken);
+  assert.notEqual(rotationResult.newRefreshToken, initial.token);
+
+  // Attempting to reuse the revoked old refresh token triggers security alert
+  const reuseResult = verifyAndRotateRefreshToken(initial.token);
+  assert.equal(reuseResult.success, false);
+  assert.equal(reuseResult.error, 'TOKEN_REUSE_DETECTED');
+});
+
+test('Auth: Logout revocation invalidates access token before natural expiration', () => {
+  const user = {
+    id: 'usr_test_logout_02',
+    email: 'logout_test@manuscript.ai',
+    role: 'RESEARCHER' as const,
+    displayName: 'Logout Researcher',
+  };
+
+  const token = signJwtToken(user, 1800);
+  const payloadBefore = verifyJwtToken(token);
+  assert.ok(payloadBefore);
+  assert.ok(payloadBefore.jti);
+
+  // Revoke token via logout
+  revokeToken(payloadBefore.jti, payloadBefore.exp);
+
+  // Subsequent verification must fail immediately
+  const payloadAfter = verifyJwtToken(token);
+  assert.equal(payloadAfter, null, 'Revoked JWT token must not pass verification');
+});
+
+test('Auth: Brute-force rate limiting locks out identifier after 5 consecutive failures', () => {
+  const testIp = `192.168.10.${Math.floor(Math.random() * 200)}`;
+  const testId = `${testIp}_test_rate_limit@manuscript.ai`;
+
+  // First 4 attempts do not block
+  for (let i = 1; i <= 4; i++) {
+    const res = recordFailedLogin(testId);
+    assert.equal(res.isNowBlocked, false);
+  }
+
+  // 5th attempt locks out
+  const fifthAttempt = recordFailedLogin(testId);
+  assert.equal(fifthAttempt.isNowBlocked, true);
+  assert.ok(fifthAttempt.retryAfterSeconds > 0);
+
+  // Check rate limit status
+  const check = checkLoginRateLimit(testId);
+  assert.equal(check.allowed, false);
+
+  // Successful login clears the lockout
+  recordSuccessfulLogin(testId);
+  const checkAfterSuccess = checkLoginRateLimit(testId);
+  assert.equal(checkAfterSuccess.allowed, true);
+});
+
+// -------------------------------------------------------------
+// Storage Orphan Cleanup Test
+// -------------------------------------------------------------
+test('Storage: Safely removes image file and cleans up orphan files', async () => {
+  const storage = new StorageService();
+  const validPngHeader = Buffer.from([
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+    0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00,
+  ]);
+
+  const stored = await storage.storeImage(validPngHeader, 'test_cleanup.png');
+  assert.ok(stored.storageKey);
+
+  // Verify stream while file exists, and wait for stream to close cleanly
+  const streamResult = storage.getImageStream(stored.storageKey);
+  assert.ok(streamResult.size > 0);
+  await new Promise((resolve) => {
+    streamResult.stream.resume();
+    streamResult.stream.on('end', resolve);
+  });
+
+  // Simulate database failure cleanup
+  const removed = await storage.removeImage(stored.storageKey);
+  assert.equal(removed, true);
+
+  // File should now be gone (stream throws)
+  assert.throws(() => {
+    storage.getImageStream(stored.storageKey);
+  }, /not found on disk/i);
 });

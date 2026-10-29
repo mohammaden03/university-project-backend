@@ -28,6 +28,13 @@ import {
   verifyJwtToken,
   hasRolePermission,
   UserRole,
+  checkLoginRateLimit,
+  recordFailedLogin,
+  recordSuccessfulLogin,
+  createRefreshToken,
+  verifyAndRotateRefreshToken,
+  revokeToken,
+  revokeRefreshToken,
 } from '../common/auth.js';
 import {
   normalizePersianArabicText,
@@ -47,6 +54,8 @@ export interface AuthenticatedRequest extends Request {
     email: string;
     role: UserRole;
     displayName: string;
+    jti?: string;
+    exp?: number;
   };
 }
 
@@ -62,7 +71,7 @@ export function authenticateToken(req: AuthenticatedRequest, res: Response, next
   const token = authHeader.split(' ')[1];
   const payload = verifyJwtToken(token);
   if (!payload) {
-    return res.status(401).json(errorResponse('INVALID_TOKEN', 'Token is invalid or has expired'));
+    return res.status(401).json(errorResponse('INVALID_TOKEN', 'Token is invalid, expired, or has been revoked'));
   }
 
   req.user = {
@@ -70,6 +79,8 @@ export function authenticateToken(req: AuthenticatedRequest, res: Response, next
     email: payload.email,
     role: payload.role,
     displayName: payload.displayName,
+    jti: payload.jti,
+    exp: payload.exp,
   };
   next();
 }
@@ -85,6 +96,8 @@ export function optionalAuth(req: AuthenticatedRequest, res: Response, next: Nex
         email: payload.email,
         role: payload.role,
         displayName: payload.displayName,
+        jti: payload.jti,
+        exp: payload.exp,
       };
     }
   }
@@ -154,21 +167,44 @@ apiRouter.post('/auth/login', async (req: Request, res: Response) => {
     );
   }
 
+  const normalizedEmail = email.trim().toLowerCase();
+  const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+  const rateLimitKey = `${clientIp}_${normalizedEmail}`;
+
+  // Check login rate limiting (max 5 failed attempts per 15 min)
+  const rateLimitStatus = checkLoginRateLimit(rateLimitKey);
+  if (!rateLimitStatus.allowed) {
+    return res.status(429).json(
+      errorResponse(
+        'RATE_LIMIT_EXCEEDED',
+        `Too many failed login attempts. Please wait ${rateLimitStatus.retryAfterSeconds} seconds before trying again.`
+      )
+    );
+  }
+
   // Find user via Prisma
   const matchedUser = await prisma.user.findUnique({
-    where: { email: email.trim().toLowerCase() },
+    where: { email: normalizedEmail },
   });
 
   if (!matchedUser || !verifyPassword(password, matchedUser.passwordHash)) {
-    return res.status(401).json(errorResponse('INVALID_CREDENTIALS', 'Invalid email or password'));
+    const failedResult = recordFailedLogin(rateLimitKey);
+    const warning = failedResult.isNowBlocked
+      ? ` Account locked for ${failedResult.retryAfterSeconds}s due to consecutive failures.`
+      : '';
+    return res.status(401).json(errorResponse('INVALID_CREDENTIALS', `Invalid email or password.${warning}`));
   }
 
   if (!matchedUser.isActive) {
     return res.status(403).json(errorResponse('ACCOUNT_DISABLED', 'User account is deactivated. Contact an administrator.'));
   }
 
+  // Successful login: reset rate limiter
+  recordSuccessfulLogin(rateLimitKey);
+
+  // Issue real JWT access token and rotatable refresh token
   const token = signJwtToken(matchedUser);
-  const refreshToken = `rf_${crypto.randomUUID()}`;
+  const refresh = createRefreshToken(matchedUser.id);
 
   await prisma.auditEvent.create({
     data: {
@@ -186,15 +222,49 @@ apiRouter.post('/auth/login', async (req: Request, res: Response) => {
   return res.status(200).json(
     successResponse({
       accessToken: token,
-      refreshToken,
+      refreshToken: refresh.token,
       tokenType: 'Bearer',
-      expiresIn: 900,
+      expiresIn: 900, // 15 minutes
       user: {
         id: matchedUser.id,
         email: matchedUser.email,
         displayName: matchedUser.displayName,
         role: matchedUser.role,
       },
+    })
+  );
+});
+
+apiRouter.post('/auth/refresh', async (req: Request, res: Response) => {
+  const { refreshToken } = req.body || {};
+  if (!refreshToken || typeof refreshToken !== 'string') {
+    return res.status(400).json(
+      errorResponse('VALIDATION_ERROR', 'refreshToken is required in request body', [
+        { field: 'refreshToken', message: 'Valid refresh token string is required' },
+      ])
+    );
+  }
+
+  const result = verifyAndRotateRefreshToken(refreshToken);
+  if (!result.success || !result.userId) {
+    return res.status(401).json(
+      errorResponse('INVALID_REFRESH_TOKEN', result.error || 'The provided refresh token is expired, invalid, or revoked')
+    );
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: result.userId } });
+  if (!user || !user.isActive) {
+    return res.status(403).json(errorResponse('ACCOUNT_DISABLED', 'User account is inactive or has been deleted'));
+  }
+
+  const newAccessToken = signJwtToken(user);
+
+  return res.status(200).json(
+    successResponse({
+      accessToken: newAccessToken,
+      refreshToken: result.newRefreshToken,
+      tokenType: 'Bearer',
+      expiresIn: 900,
     })
   );
 });
@@ -220,6 +290,17 @@ apiRouter.get('/auth/me', authenticateToken, async (req: AuthenticatedRequest, r
 });
 
 apiRouter.post('/auth/logout', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  // Meaningful logout: Revoke the current access token jti until expiry
+  if (req.user?.jti && req.user?.exp) {
+    revokeToken(req.user.jti, req.user.exp);
+  }
+
+  // Also revoke the refresh token if provided in request body
+  const { refreshToken } = req.body || {};
+  if (refreshToken && typeof refreshToken === 'string') {
+    revokeRefreshToken(refreshToken);
+  }
+
   await prisma.auditEvent.create({
     data: {
       userId: req.user!.userId,
@@ -228,43 +309,38 @@ apiRouter.post('/auth/logout', authenticateToken, async (req: AuthenticatedReque
       entityId: req.user!.userId,
     },
   });
-  res.status(200).json(successResponse({ message: 'Successfully logged out' }));
+
+  res.status(200).json(successResponse({ message: 'Successfully logged out and revoked active tokens' }));
 });
 
 // -------------------------------------------------------------
-// 3. Books API
+// 3. Books API (Database-level Filtering, Pagination & Counting)
 // -------------------------------------------------------------
 apiRouter.get('/books', async (req: Request, res: Response) => {
-  const page = parseInt(req.query.page as string, 10) || 1;
-  const limit = parseInt(req.query.limit as string, 10) || 20;
+  const page = Math.max(1, parseInt(req.query.page as string, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string, 10) || 20));
   const language = req.query.language as string;
-  const search = (req.query.search as string || req.query.q as string || '').trim().toLowerCase();
+  const rawSearch = (req.query.search as string || req.query.q as string || '').trim();
 
-  let booksList = await prisma.book.findMany();
-
+  const where: any = {};
   if (language && language !== 'all') {
-    booksList = booksList.filter((b: any) => b.language === language);
+    where.language = language;
   }
 
-  if (search) {
-    const normalizedQuery = normalizePersianArabicText(search);
-    booksList = booksList.filter((b: any) => {
-      const titleNorm = normalizePersianArabicText(b.title);
-      const authorNorm = normalizePersianArabicText(b.author || '');
-      const descNorm = normalizePersianArabicText(b.description || '');
-      const msId = (b.manuscriptIdentifier || '').toLowerCase();
-      return (
-        titleNorm.includes(normalizedQuery) ||
-        authorNorm.includes(normalizedQuery) ||
-        descNorm.includes(normalizedQuery) ||
-        msId.includes(search)
-      );
-    });
+  if (rawSearch) {
+    const normalizedQuery = normalizePersianArabicText(rawSearch);
+    where.search = normalizedQuery;
   }
 
-  const total = booksList.length;
-  const startIndex = (page - 1) * limit;
-  const paginatedBooks = booksList.slice(startIndex, startIndex + limit);
+  const [total, paginatedBooks] = await Promise.all([
+    prisma.book.count({ where }),
+    prisma.book.findMany({
+      where,
+      skip: (page - 1) * limit,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+    }),
+  ]);
 
   res.status(200).json(paginatedResponse(paginatedBooks, total, page, limit));
 });
@@ -280,30 +356,34 @@ apiRouter.post('/books', authenticateToken, requireRole('RESEARCHER'), async (re
     );
   }
 
-  const newBook = await prisma.book.create({
-    data: {
-      id: `bk_${crypto.randomUUID().slice(0, 8)}`,
-      title: title.trim(),
-      author: author ? author.trim() : null,
-      language: language || 'fa',
-      description: description ? description.trim() : null,
-      manuscriptIdentifier: manuscriptIdentifier ? manuscriptIdentifier.trim() : null,
-      estimatedDate: estimatedDate ? estimatedDate.trim() : null,
-      collectionName: collectionName ? collectionName.trim() : null,
-      sourceUrl: sourceUrl ? sourceUrl.trim() : null,
-      license: license || 'Public Domain',
-      createdById: req.user!.userId,
-    },
-  });
+  const newBook = await prisma.$transaction(async (tx) => {
+    const book = await tx.book.create({
+      data: {
+        id: `bk_${crypto.randomUUID().slice(0, 8)}`,
+        title: title.trim(),
+        author: author ? author.trim() : null,
+        language: language || 'fa',
+        description: description ? description.trim() : null,
+        manuscriptIdentifier: manuscriptIdentifier ? manuscriptIdentifier.trim() : null,
+        estimatedDate: estimatedDate ? estimatedDate.trim() : null,
+        collectionName: collectionName ? collectionName.trim() : null,
+        sourceUrl: sourceUrl ? sourceUrl.trim() : null,
+        license: license || 'Public Domain',
+        createdById: req.user!.userId,
+      },
+    });
 
-  await prisma.auditEvent.create({
-    data: {
-      userId: req.user!.userId,
-      action: 'CREATE_BOOK',
-      entityType: 'Book',
-      entityId: newBook.id,
-      metadata: { title: newBook.title },
-    },
+    await tx.auditEvent.create({
+      data: {
+        userId: req.user!.userId,
+        action: 'CREATE_BOOK',
+        entityType: 'Book',
+        entityId: book.id,
+        metadata: { title: book.title },
+      },
+    });
+
+    return book;
   });
 
   res.status(201).json(successResponse(newBook));
@@ -328,28 +408,32 @@ apiRouter.patch('/books/:id', authenticateToken, requireRole('RESEARCHER'), asyn
 
   const { title, author, language, description, manuscriptIdentifier, estimatedDate, collectionName, sourceUrl, license } = req.body || {};
 
-  const updatedBook = await prisma.book.update({
-    where: { id: req.params.id },
-    data: {
-      ...(title !== undefined ? { title: title.trim() } : {}),
-      ...(author !== undefined ? { author: author ? author.trim() : null } : {}),
-      ...(language !== undefined ? { language } : {}),
-      ...(description !== undefined ? { description: description ? description.trim() : null } : {}),
-      ...(manuscriptIdentifier !== undefined ? { manuscriptIdentifier } : {}),
-      ...(estimatedDate !== undefined ? { estimatedDate } : {}),
-      ...(collectionName !== undefined ? { collectionName } : {}),
-      ...(sourceUrl !== undefined ? { sourceUrl } : {}),
-      ...(license !== undefined ? { license } : {}),
-    },
-  });
+  const updatedBook = await prisma.$transaction(async (tx) => {
+    const book = await tx.book.update({
+      where: { id: req.params.id },
+      data: {
+        ...(title !== undefined ? { title: title.trim() } : {}),
+        ...(author !== undefined ? { author: author ? author.trim() : null } : {}),
+        ...(language !== undefined ? { language } : {}),
+        ...(description !== undefined ? { description: description ? description.trim() : null } : {}),
+        ...(manuscriptIdentifier !== undefined ? { manuscriptIdentifier } : {}),
+        ...(estimatedDate !== undefined ? { estimatedDate } : {}),
+        ...(collectionName !== undefined ? { collectionName } : {}),
+        ...(sourceUrl !== undefined ? { sourceUrl } : {}),
+        ...(license !== undefined ? { license } : {}),
+      },
+    });
 
-  await prisma.auditEvent.create({
-    data: {
-      userId: req.user!.userId,
-      action: 'UPDATE_BOOK',
-      entityType: 'Book',
-      entityId: updatedBook.id,
-    },
+    await tx.auditEvent.create({
+      data: {
+        userId: req.user!.userId,
+        action: 'UPDATE_BOOK',
+        entityType: 'Book',
+        entityId: book.id,
+      },
+    });
+
+    return book;
   });
 
   res.status(200).json(successResponse(updatedBook));
@@ -361,22 +445,23 @@ apiRouter.delete('/books/:id', authenticateToken, requireRole('ADMIN'), async (r
     return res.status(404).json(errorResponse('NOT_FOUND', `Book with ID '${req.params.id}' was not found`));
   }
 
-  await prisma.book.delete({ where: { id: req.params.id } });
-
-  await prisma.auditEvent.create({
-    data: {
-      userId: req.user!.userId,
-      action: 'DELETE_BOOK',
-      entityType: 'Book',
-      entityId: existing.id,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.book.delete({ where: { id: req.params.id } });
+    await tx.auditEvent.create({
+      data: {
+        userId: req.user!.userId,
+        action: 'DELETE_BOOK',
+        entityType: 'Book',
+        entityId: existing.id,
+      },
+    });
   });
 
   res.status(200).json(successResponse({ message: `Book '${existing.title}' and associated pages deleted successfully` }));
 });
 
 // -------------------------------------------------------------
-// 4. Manuscript Pages & Upload API
+// 4. Manuscript Pages & Upload API (Transactional with Orphan Cleanup)
 // -------------------------------------------------------------
 apiRouter.get('/books/:bookId/pages', async (req: Request, res: Response) => {
   const book = await prisma.book.findUnique({ where: { id: req.params.bookId } });
@@ -441,35 +526,114 @@ apiRouter.post('/books/:bookId/pages', authenticateToken, requireRole('RESEARCHE
 
   const storageKey = `uploads/folios/${book.id}_p${pNum}_${Date.now()}.webp`;
 
-  const newPage = await prisma.manuscriptPage.create({
-    data: {
-      id: `pg_${crypto.randomUUID().slice(0, 8)}`,
-      bookId: book.id,
-      pageNumber: pNum,
-      folioLabel: folioLabel || `Folio ${pNum}r`,
-      imageStorageKey: storageKey,
-      originalFilename: originalFilename || `manuscript_p${pNum}.webp`,
-      mimeType: targetMime,
-      fileSize: fileSize || 350000,
-      checksum: checksum || crypto.createHash('sha256').update(`${book.id}_${pNum}`).digest('hex'),
-      imageWidth: imageWidth || 1600,
-      imageHeight: imageHeight || 2400,
-      language: language || book.language,
-      uploadedById: req.user!.userId,
-      lines: lines || [],
-    },
-  });
+  const newPage = await prisma.$transaction(async (tx) => {
+    const page = await tx.manuscriptPage.create({
+      data: {
+        id: `pg_${crypto.randomUUID().slice(0, 8)}`,
+        bookId: book.id,
+        pageNumber: pNum,
+        folioLabel: folioLabel || `Folio ${pNum}r`,
+        imageStorageKey: storageKey,
+        originalFilename: originalFilename || `manuscript_p${pNum}.webp`,
+        mimeType: targetMime,
+        fileSize: fileSize || 350000,
+        checksum: checksum || crypto.createHash('sha256').update(`${book.id}_${pNum}`).digest('hex'),
+        imageWidth: imageWidth || 1600,
+        imageHeight: imageHeight || 2400,
+        language: language || book.language,
+        uploadedById: req.user!.userId,
+        lines: lines || [],
+      },
+    });
 
-  await prisma.auditEvent.create({
-    data: {
-      userId: req.user!.userId,
-      action: 'UPLOAD_MANUSCRIPT_PAGE',
-      entityType: 'ManuscriptPage',
-      entityId: newPage.id,
-    },
+    await tx.auditEvent.create({
+      data: {
+        userId: req.user!.userId,
+        action: 'UPLOAD_MANUSCRIPT_PAGE',
+        entityType: 'ManuscriptPage',
+        entityId: page.id,
+      },
+    });
+
+    return page;
   });
 
   res.status(201).json(successResponse(newPage));
+});
+
+// Binary / Base64 Page Upload with Magic Bytes Validation and Safe Orphan Cleanup
+apiRouter.post('/books/:bookId/pages/upload', authenticateToken, requireRole('RESEARCHER'), async (req: AuthenticatedRequest, res: Response) => {
+  const book = await prisma.book.findUnique({ where: { id: req.params.bookId } });
+  if (!book) {
+    return res.status(404).json(errorResponse('NOT_FOUND', `Book '${req.params.bookId}' not found`));
+  }
+
+  const { pageNumber, folioLabel, imageBase64, filename, language } = req.body || {};
+  const pNum = parseInt(pageNumber, 10);
+  if (isNaN(pNum) || pNum < 1) {
+    return res.status(400).json(errorResponse('VALIDATION_ERROR', 'pageNumber must be an integer >= 1'));
+  }
+  if (!imageBase64 || typeof imageBase64 !== 'string') {
+    return res.status(400).json(errorResponse('VALIDATION_ERROR', 'imageBase64 payload is required'));
+  }
+
+  // Prevent duplicate page number
+  const existingPage = await prisma.manuscriptPage.findFirst({
+    where: { bookId: book.id, pageNumber: pNum },
+  });
+  if (existingPage) {
+    return res.status(409).json(errorResponse('CONFLICT', `Page number ${pNum} already exists in this book`));
+  }
+
+  // Clean base64 prefix if present (e.g. data:image/jpeg;base64,...)
+  const pureBase64 = imageBase64.includes(',') ? imageBase64.split(',')[1] : imageBase64;
+  const buffer = Buffer.from(pureBase64, 'base64');
+
+  let storedMeta;
+  try {
+    storedMeta = await storageService.storeImage(buffer, filename || `page_${pNum}.jpg`);
+  } catch (err: any) {
+    return res.status(415).json(errorResponse('UNSUPPORTED_MEDIA_TYPE', err.message));
+  }
+
+  try {
+    const page = await prisma.$transaction(async (tx) => {
+      const created = await tx.manuscriptPage.create({
+        data: {
+          id: `pg_${crypto.randomUUID().slice(0, 8)}`,
+          bookId: book.id,
+          pageNumber: pNum,
+          folioLabel: folioLabel || `Folio ${pNum}r`,
+          imageStorageKey: storedMeta.storageKey,
+          originalFilename: storedMeta.originalFilename,
+          mimeType: storedMeta.mimeType,
+          fileSize: storedMeta.fileSize,
+          checksum: storedMeta.checksum,
+          imageWidth: storedMeta.width,
+          imageHeight: storedMeta.height,
+          language: language || book.language,
+          uploadedById: req.user!.userId,
+        },
+      });
+
+      await tx.auditEvent.create({
+        data: {
+          userId: req.user!.userId,
+          action: 'UPLOAD_MANUSCRIPT_PAGE',
+          entityType: 'ManuscriptPage',
+          entityId: created.id,
+        },
+      });
+
+      return created;
+    });
+
+    return res.status(201).json(successResponse(page));
+  } catch (dbErr: any) {
+    // Prevent orphan files on disk: remove the uploaded image if DB write failed
+    await storageService.removeImage(storedMeta.storageKey);
+    return res.status(500).json(errorResponse('DATABASE_ERROR', `Failed committing page metadata: ${dbErr.message}`));
+  }
 });
 
 apiRouter.get('/pages/:id', async (req: Request, res: Response) => {

@@ -101,6 +101,17 @@ export class AiClientService {
 
     // Check provider configuration
     if (this.providerType === 'mock') {
+      const isProduction = process.env.NODE_ENV === 'production';
+      const isMockExplicitlyEnabled = process.env.ENABLE_MOCK_AI === 'true';
+
+      if (isProduction && !isMockExplicitlyEnabled) {
+        throw {
+          code: 'MOCK_INFERENCE_DISABLED_IN_PRODUCTION',
+          message: 'Mock AI provider is strictly disabled in production. Configure AI_PROVIDER=pretrained and run the Python AI service, or set ENABLE_MOCK_AI=true explicitly for testing.',
+          isFatal: true,
+        };
+      }
+
       // Deterministic mock provider for local development & automated tests
       // Explicitly flagged as mock output so user and UI know it is mock data
       const durationMs = Date.now() - startTime;

@@ -84,6 +84,32 @@ Default demo credentials:
         responses: {
           200: { description: 'Authenticated successfully' },
           401: { description: 'Invalid credentials' },
+          429: { description: 'Too many failed login attempts' },
+        },
+      },
+    },
+    '/api/v1/auth/refresh': {
+      post: {
+        tags: ['Authentication'],
+        summary: 'Rotate and exchange a valid refresh token for a new access token and rotated refresh token',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['refreshToken'],
+                properties: {
+                  refreshToken: { type: 'string', example: 'rf_9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d.secret' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Token refreshed successfully with rotated refresh token' },
+          401: { description: 'Invalid, expired, or reused refresh token' },
+          403: { description: 'Account disabled' },
         },
       },
     },

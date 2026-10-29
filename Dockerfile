@@ -27,4 +27,4 @@ RUN mkdir -p /app/storage/uploads/folios /app/storage/models
 
 EXPOSE 3000
 
-CMD ["npx", "tsx", "server.ts"]
+CMD ["npm", "start"]

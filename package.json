@@ -10,6 +10,7 @@
     "seed": "tsx prisma/seed.ts",
     "test": "tsx --test src/tests/manuscript-core.test.ts",
     "clean": "rm -rf dist server.js",
+    "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit"
   },
   "dependencies": {
