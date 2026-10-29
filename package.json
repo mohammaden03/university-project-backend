@@ -1,13 +1,13 @@
 {
-  "name": "react-example",
+  "name": "manuscript-ai-backend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
-    "start": "tsx server.ts",
-    "preview": "vite preview",
+    "build": "esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js && tsc --noEmit",
+    "start": "node dist/server.js",
+    "seed": "tsx prisma/seed.ts",
     "test": "tsx --test src/tests/manuscript-core.test.ts",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"

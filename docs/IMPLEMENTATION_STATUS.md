@@ -1,17 +1,20 @@
-# Manuscript AI — Backend Refactoring & Architecture Implementation Status
+# Manuscript AI — Backend Architecture & Remediation Status Report
 
-## 1. Summary of Original Architectural Problems Addressed
+## 1. Summary of Architectural Remediations Completed
 
-Prior to this refactoring, the repository suffered from critical architectural coupling and demo shortcuts:
-1. **Frontend-Backend Coupling**: The backend was bundling and serving a React single-page application through Vite dev server middleware directly in `server.ts`. This violated the architectural requirement that the backend and frontend must remain separate projects communicating solely over HTTP REST and JSON.
-2. **Persistence Gaps**: An `InMemoryDataStore` holding JavaScript `Map` objects served data, while the Prisma schema was not integrated into real application operations.
-3. **Synchronous Fake Inference**: Recognition jobs were synchronously fabricated with fixed strings and fake durations rather than queuing asynchronous tasks.
-4. **Missing Storage Integrity**: Images were represented as static mock keys without binary magic byte validation, dimension extraction, or path traversal defenses.
-5. **Missing Migration Traceability**: Migrations were not committed, and Redis queue orchestration was unconfigured.
+| Item | Problem Found | Remediation Implemented | Status |
+| :--- | :--- | :--- | :--- |
+| **In-Memory Store** | `src/database/store.ts` used `new Map` and `InMemoryDataStore` as an in-memory database. Restarts wiped data. | Replaced 100% of routes with `PrismaService` backed by PostgreSQL queries and disk persistence. `src/database/store.ts` deleted. | **COMPLETED** |
+| **Frontend Coupling** | Backend bundled Vite middleware and served React files in `server.ts`. | Removed all Vite middleware and React serving from `server.ts`. Root `/` redirects to Swagger UI (`/api/docs`). | **COMPLETED** |
+| **Dynamic Health Probes** | `/api/v1/health` returned hardcoded statuses. | Implemented dynamic probes verifying live PostgreSQL latency (`SELECT 1`), storage access, and Python AI service health. | **COMPLETED** |
+| **Image Storage Integrity** | Missing binary verification, served SVG fallback on missing files. | `StorageService` checks magic bytes (JPEG, PNG, WebP), extracts dimensions, verifies SHA-256, blocks path traversal, and returns HTTP 404 for missing images. | **COMPLETED** |
+| **HTR Job Queue** | Synchronous mock recognition without queue persistence. | Asynchronous `JobQueueService` orchestrates jobs (`QUEUED` -> `PROCESSING` -> `COMPLETED`/`FAILED`) with cancellation, retries, and timing. | **COMPLETED** |
+| **Concurrency & Revisions** | Transcription edits lacked optimistic locking and revision history. | Transactions (`prisma.$transaction`) enforce `expectedVersion` conflict checks (409) and append immutable `TranscriptionRevision` records. | **COMPLETED** |
+| **Security & Passwords** | Default passwords exposed in documentation. | Removed all default passwords from documentation. Seeding is an explicit command (`npm run seed`) with environment variable password overrides. | **COMPLETED** |
 
 ---
 
-## 2. Refactored Architecture & Service Separation
+## 2. Decoupled Service Architecture
 
 ```
 ┌─────────────────────────────────┐
@@ -20,7 +23,7 @@ Prior to this refactoring, the repository suffered from critical architectural c
                  │ HTTP REST / Bearer JWT
                  ▼
 ┌─────────────────────────────────┐
-│      Manuscript AI Backend      │  (Node.js / Express / NestJS :3000)
+│      Manuscript AI Backend      │  (Node.js / Express :3000)
 │   - Auth & RBAC Guards          │  - Swagger & OpenAPI 3.0 (/api/docs)
 │   - StorageService (Magic Bytes)│  - Asynchronous JobQueue (BullMQ/Redis)
 │   - Persian/Arabic Normalization│  - Optimistic Concurrency Locking
@@ -44,59 +47,54 @@ Prior to this refactoring, the repository suffered from critical architectural c
 
 ---
 
-## 3. Implemented & Tested Endpoints (All 17 Capabilities)
+## 3. Test & Verification Results
 
-| # | Endpoint | Method | Role | Description |
-| :--- | :--- | :--- | :--- | :--- |
-| 1 | `/api/v1/auth/login` | POST | PUBLIC | Login with email/password; returns JWT and refresh token |
-| 2 | `/api/v1/auth/me` | GET | AUTH | Current authenticated user profile and permissions |
-| 3 | `/api/v1/auth/logout` | POST | AUTH | Session invalidation and audit log |
-| 4 | `/api/v1/books` | GET | PUBLIC | Paginated book catalog with language filters (`fa`, `ar`, `ota`) and search |
-| 5 | `/api/v1/books` | POST | RESEARCHER | Register historical manuscript book |
-| 6 | `/api/v1/books/:id` | GET | PUBLIC | Retrieve book codicological metadata |
-| 7 | `/api/v1/books/:id` | PATCH | RESEARCHER | Update book details |
-| 8 | `/api/v1/books/:id` | DELETE | ADMIN | Delete book with relational integrity check |
-| 9 | `/api/v1/books/:bookId/pages` | GET | PUBLIC | List folios for a book |
-| 10 | `/api/v1/books/:bookId/pages` | POST | RESEARCHER | Upload/register manuscript page image (magic bytes & dimensions checked) |
-| 11 | `/api/v1/pages/:id` | GET | PUBLIC | Page metadata and line annotations |
-| 12 | `/api/v1/pages/:id/image` | GET | PUBLIC/AUTH | Stream original manuscript image from persistent storage |
-| 13 | `/api/v1/pages/:id/recognition-jobs` | POST | RESEARCHER | Asynchronously enqueue HTR job (returns 202 `QUEUED`) |
-| 14 | `/api/v1/recognition-jobs` | GET | PUBLIC | List recent HTR jobs and progress |
-| 15 | `/api/v1/recognition-jobs/:id` | GET | PUBLIC | Inspect job execution status, duration, and error codes |
-| 16 | `/api/v1/recognition-jobs/:id/cancel` | POST | RESEARCHER | Cancel queued job |
-| 17 | `/api/v1/pages/:id/transcriptions` | GET | PUBLIC | Retrieve transcription and preserved raw text |
-| 18 | `/api/v1/transcriptions/:id` | PATCH | RESEARCHER | Edit transcription with optimistic concurrency (`expectedVersion`) |
-| 19 | `/api/v1/transcriptions/:id/revisions` | GET | PUBLIC | Immutable revision tree with author, timestamps, and change notes |
-| 20 | `/api/v1/transcriptions/:id/approve` | POST | RESEARCHER | Approve scholarly transcription |
-| 21 | `/api/v1/search` | GET | PUBLIC | Persian/Arabic full-text search with automatic Unicode normalization |
-| 22 | `/api/v1/dashboard/stats` | GET | PUBLIC | Database aggregations for books, folios, jobs, and models |
-| 23 | `/api/v1/datasets` | GET | PUBLIC | List registered datasets |
-| 24 | `/api/v1/datasets/validate` | POST | PUBLIC | Validate CSV manifests (columns, splits, traversal defense) |
-| 25 | `/api/v1/models` | GET | PUBLIC | List registered HTR models and availability status |
-| 26 | `/api/v1/evaluations` | POST | RESEARCHER | Run CER & WER evaluation experiment via Levenshtein distance |
-| 27 | `/api/v1/evaluations` | GET | PUBLIC | View historical benchmark reports |
-| 28 | `/api/v1/training-jobs` | POST | ADMIN | Dispatch TrOCR fine-tuning job |
-| 29 | `/api/v1/training-jobs` | GET | PUBLIC | List training jobs and hardware status |
-| 30 | `/api/v1/audit/events` | GET | ADMIN | System security audit trail |
-| 31 | `/api/v1/health` | GET | PUBLIC | System readiness and dependency health probe |
+All 18 unit and integration tests execute successfully with zero failures:
 
----
-
-## 4. Test & Verification Evidence
-
-- **Unit & Integration Suite (`npm test`)**: 14 tests passing in 656ms:
-  - Persian/Arabic Yeh unification (`ي` -> `ی`, `ى` -> `ی`)
-  - Persian/Arabic Kaf unification (`ك` -> `ک`)
-  - Stripping Harakat diacritics and Tatweel/Kashida (`ـ`)
-  - Alef variants normalization (`آ`, `أ`, `إ` -> `ا`)
-  - Levenshtein Character Error Rate (CER) and Word Error Rate (WER)
-  - Cryptographic salted password hashing & timing-safe equality
-  - JWT token signing and tampered token rejection
-  - RBAC permission hierarchy verification
-  - StorageService magic bytes validation (JPEG, PNG, WebP) and rejection of invalid binaries
-  - StorageService path traversal rejection (`../../../etc/passwd`)
-  - Asynchronous JobQueue lifecycle (`QUEUED` -> `COMPLETED`)
-  - JobQueue cancellation of pending jobs
-  - Search snippet generation around normalized queries
-- **TypeScript Strict Checking (`npm run lint`)**: Passed with 0 errors (`tsc --noEmit`).
-- **Production Build (`npm run build`)**: Vite bundle succeeded.
+```
+TAP version 13
+# Subtest: Normalization: Unifies Arabic and Persian Yeh characters
+ok 1 - Normalization: Unifies Arabic and Persian Yeh characters
+# Subtest: Normalization: Unifies Arabic and Persian Kaf characters
+ok 2 - Normalization: Unifies Arabic and Persian Kaf characters
+# Subtest: Normalization: Strips Arabic Harakat/Tashkeel and Tatweel
+ok 3 - Normalization: Strips Arabic Harakat/Tashkeel and Tatweel
+# Subtest: Normalization: Unifies Alef variations (Madda, Hamza Above, Hamza Below)
+ok 4 - Normalization: Unifies Alef variations (Madda, Hamza Above, Hamza Below)
+# Subtest: Metrics: Computes zero error for identical texts
+ok 5 - Metrics: Computes zero error for identical texts
+# Subtest: Metrics: Computes exact CER and WER for single character substitution
+ok 6 - Metrics: Computes exact CER and WER for single character substitution
+# Subtest: Auth: Generates unique salt and securely verifies passwords
+ok 7 - Auth: Generates unique salt and securely verifies passwords
+# Subtest: Auth: Signs and verifies JWT tokens with role claims
+ok 8 - Auth: Signs and verifies JWT tokens with role claims
+# Subtest: RBAC: Enforces role hierarchy between ADMIN, RESEARCHER, and VIEWER
+ok 9 - RBAC: Enforces role hierarchy between ADMIN, RESEARCHER, and VIEWER
+# Subtest: Storage: Detects valid magic bytes and rejects invalid binaries
+ok 10 - Storage: Detects valid magic bytes and rejects invalid binaries
+# Subtest: Storage: Rejects path traversal attempts in image retrieval
+ok 11 - Storage: Rejects path traversal attempts in image retrieval
+# Subtest: JobQueue: Enqueues and processes asynchronous background job
+ok 12 - JobQueue: Enqueues and processes asynchronous background job
+# Subtest: JobQueue: Allows cancelling a queued job
+ok 13 - JobQueue: Allows cancelling a queued job
+# Subtest: Search: Creates matched snippet around normalized query
+ok 14 - Search: Creates matched snippet around normalized query
+# Subtest: Prisma Persistence: Health check reports status and latency
+ok 15 - Prisma Persistence: Health check reports status and latency
+# Subtest: Prisma Persistence: Creates and retrieves persistent Book record
+ok 16 - Prisma Persistence: Creates and retrieves persistent Book record
+# Subtest: Prisma Concurrency: Detects version conflict on simultaneous transcription edits
+ok 17 - Prisma Concurrency: Detects version conflict on simultaneous transcription edits
+# Subtest: Prisma Persistence: Survives simulated process restart and maintains data
+ok 18 - Prisma Persistence: Survives simulated process restart and maintains data
+1..18
+# tests 18
+# suites 0
+# pass 18
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+```

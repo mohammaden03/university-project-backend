@@ -1,0 +1,447 @@
+{
+  "users": [
+    {
+      "id": "usr_admin_001",
+      "createdAt": "2026-10-29T14:42:14.449Z",
+      "updatedAt": "2026-10-29T14:48:35.028Z",
+      "email": "admin@manuscript.ai",
+      "passwordHash": "pbkdf2$10000$af7f12fa69f33dd7121b69b0a926be94$c5d5b771f08bda30f3a4454bc286f09b4690dde67eb6d2f57a701e4be11fea115953d9c659a22a01d045318360f60748228f7c40bcfcf33ed0932c1ee24341d0",
+      "displayName": "Dr. Maryam Mirzakhani",
+      "role": "ADMIN",
+      "isActive": true
+    },
+    {
+      "id": "usr_researcher_002",
+      "createdAt": "2026-10-29T14:42:14.457Z",
+      "updatedAt": "2026-10-29T14:48:35.037Z",
+      "email": "researcher@manuscript.ai",
+      "passwordHash": "pbkdf2$10000$ac1ab43c186f360736239aff845b1f4e$0986e9a69af5b987ae104f2f404e07a263de2198d6e9e7de59e7d69f731fdc891bcc5dd4b15bd546787459557c42329328ee487ea834cef7bd26269f56d2c99e",
+      "displayName": "Prof. Ehsan Yarshater",
+      "role": "RESEARCHER",
+      "isActive": true
+    },
+    {
+      "id": "usr_viewer_003",
+      "createdAt": "2026-10-29T14:42:14.464Z",
+      "updatedAt": "2026-10-29T14:48:35.044Z",
+      "email": "viewer@manuscript.ai",
+      "passwordHash": "pbkdf2$10000$7b02cafe310c12d82e35f1512c09ec6f$5619c92f4ee93116ca6c57c105c1e619aa7244aa179e08f0a019858b72e079ff3b0498239743691ba950451bfc8fd020005bbb8d03a5551a93ce295d0d727879",
+      "displayName": "Layla Al-Khatib",
+      "role": "VIEWER",
+      "isActive": true
+    }
+  ],
+  "books": [
+    {
+      "id": "bk_shahnameh_01",
+      "createdAt": "2026-10-29T14:42:14.464Z",
+      "updatedAt": "2026-10-29T14:48:35.045Z",
+      "title": "Shahnameh of Ferdowsi (شاهنامه فردوسی)",
+      "author": "Abolqasem Ferdowsi (ابوالقاسم فردوسی)",
+      "language": "fa",
+      "description": "The monumental Shah Tahmasp manuscript, celebrated for exquisite Nastaliq calligraphy and Safavid miniature illumination.",
+      "manuscriptIdentifier": "MS. Houghton / Met 1970.301",
+      "estimatedDate": "1522–1540 CE (Safavid Era)",
+      "collectionName": "Metropolitan Museum of Art & Tehran Museum of Contemporary Art",
+      "sourceUrl": "https://www.metmuseum.org/art/collection/search/452102",
+      "license": "Public Domain / Open Access",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_golestan_02",
+      "createdAt": "2026-10-29T14:42:14.465Z",
+      "updatedAt": "2026-10-29T14:48:35.045Z",
+      "title": "Golestan of Saadi Shirazi (گلستان سعدی)",
+      "author": "Saadi Shirazi (مشرف‌الدین مصلح سعدی)",
+      "language": "fa",
+      "description": "Masterpiece of Persian didactic prose and poetry in elegant Naskh and Nastaliq scripts with gilded arabesques.",
+      "manuscriptIdentifier": "MS. Or. 5319",
+      "estimatedDate": "1568 CE (976 AH)",
+      "collectionName": "British Library Oriental Collection",
+      "sourceUrl": "https://blogs.bl.uk/asian-and-african/persian.html",
+      "license": "Public Domain",
+      "createdById": "usr_researcher_002"
+    },
+    {
+      "id": "bk_qanun_03",
+      "createdAt": "2026-10-29T14:42:14.465Z",
+      "updatedAt": "2026-10-29T14:48:35.045Z",
+      "title": "The Canon of Medicine (کتاب القانون في الطب)",
+      "author": "Ibn Sina / Avicenna (ابن سینا)",
+      "language": "ar",
+      "description": "Encyclopedic medical canon in classical Arabic script, foundational to medieval Islamic and European medicine.",
+      "manuscriptIdentifier": "MS. Arab. 51",
+      "estimatedDate": "1025 CE / 416 AH",
+      "collectionName": "Bodleian Library, Oxford",
+      "sourceUrl": "https://digital.bodleian.ox.ac.uk",
+      "license": "Public Domain",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_hafiz_04",
+      "createdAt": "2026-10-29T14:42:14.465Z",
+      "updatedAt": "2026-10-29T14:48:35.045Z",
+      "title": "Divan of Hafiz Shirazi (دیوان حافظ شیرازی)",
+      "author": "Khwaja Shams-ud-Din Muhammad Hafiz (حافظ)",
+      "language": "fa",
+      "description": "Lyrical ghazals copied in Timurid Nastaliq script by Sultan Ali Mashhadi with lapis lazuli borders.",
+      "manuscriptIdentifier": "MS. Suppl. persan 1417",
+      "estimatedDate": "1485 CE (Timurid Era)",
+      "collectionName": "Bibliothèque nationale de France (BnF)",
+      "sourceUrl": "https://gallica.bnf.fr",
+      "license": "Public Domain",
+      "createdById": "usr_researcher_002"
+    },
+    {
+      "id": "bk_test_1793285200273",
+      "createdAt": "2026-10-29T14:46:40.274Z",
+      "updatedAt": "2026-10-29T14:46:40.274Z",
+      "title": "Tazkirat al-Awliya (تذکرة الاولیاء)",
+      "author": "Attar of Nishapur (عطار نیشابوری)",
+      "language": "fa",
+      "description": "Biographies of early Sufi mystics in classical Persian prose.",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_restart_1793285200276",
+      "createdAt": "2026-10-29T14:46:40.276Z",
+      "updatedAt": "2026-10-29T14:46:40.276Z",
+      "title": "Masnavi-ye Ma'navi (مثنوی معنوی)",
+      "author": "Jalal al-Din Muhammad Rumi (مولانا جلال‌الدین بلخی)",
+      "language": "fa",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_test_1793285305975",
+      "createdAt": "2026-10-29T14:48:25.975Z",
+      "updatedAt": "2026-10-29T14:48:25.975Z",
+      "title": "Tazkirat al-Awliya (تذکرة الاولیاء)",
+      "author": "Attar of Nishapur (عطار نیشابوری)",
+      "language": "fa",
+      "description": "Biographies of early Sufi mystics in classical Persian prose.",
+      "createdById": "usr_admin_001"
+    },
+    {
+      "id": "bk_restart_1793285305977",
+      "createdAt": "2026-10-29T14:48:25.977Z",
+      "updatedAt": "2026-10-29T14:48:25.977Z",
+      "title": "Masnavi-ye Ma'navi (مثنوی معنوی)",
+      "author": "Jalal al-Din Muhammad Rumi (مولانا جلال‌الدین بلخی)",
+      "language": "fa",
+      "createdById": "usr_admin_001"
+    }
+  ],
+  "manuscriptPages": [
+    {
+      "id": "pg_shahnameh_f01",
+      "createdAt": "2026-10-29T14:42:14.465Z",
+      "updatedAt": "2026-10-29T14:48:35.046Z",
+      "bookId": "bk_shahnameh_01",
+      "pageNumber": 1,
+      "folioLabel": "Folio 1b (Dibacheh)",
+      "imageStorageKey": "uploads/folios/shahnameh_f01b.webp",
+      "originalFilename": "shahnameh_dibache_f1b.webp",
+      "mimeType": "image/webp",
+      "fileSize": 482104,
+      "checksum": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "imageWidth": 1600,
+      "imageHeight": 2400,
+      "language": "fa",
+      "uploadedById": "usr_admin_001"
+    },
+    {
+      "id": "pg_golestan_f01",
+      "createdAt": "2026-10-29T14:42:14.465Z",
+      "updatedAt": "2026-10-29T14:48:35.046Z",
+      "bookId": "bk_golestan_02",
+      "pageNumber": 1,
+      "folioLabel": "Folio 1b (Preface)",
+      "imageStorageKey": "uploads/folios/golestan_f01b.webp",
+      "originalFilename": "golestan_dibache_f1b.webp",
+      "mimeType": "image/webp",
+      "fileSize": 512400,
+      "checksum": "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb",
+      "imageWidth": 1550,
+      "imageHeight": 2350,
+      "language": "fa",
+      "uploadedById": "usr_researcher_002"
+    },
+    {
+      "id": "pg_qanun_f01",
+      "createdAt": "2026-10-29T14:42:14.466Z",
+      "updatedAt": "2026-10-29T14:48:35.047Z",
+      "bookId": "bk_qanun_03",
+      "pageNumber": 1,
+      "folioLabel": "Folio 1a (Book I Opening)",
+      "imageStorageKey": "uploads/folios/qanun_f01a.webp",
+      "originalFilename": "avicenna_canon_f1a.webp",
+      "mimeType": "image/webp",
+      "fileSize": 630120,
+      "checksum": "3e23e8160039594a33894f6564e1b1348bbd7a0088d42c4acb73eeaed59c009d",
+      "imageWidth": 1700,
+      "imageHeight": 2500,
+      "language": "ar",
+      "uploadedById": "usr_admin_001"
+    },
+    {
+      "id": "pg_hafiz_f01",
+      "createdAt": "2026-10-29T14:42:14.466Z",
+      "updatedAt": "2026-10-29T14:48:35.048Z",
+      "bookId": "bk_hafiz_04",
+      "pageNumber": 1,
+      "folioLabel": "Folio 1b (Ghazal 1)",
+      "imageStorageKey": "uploads/folios/hafiz_f01b.webp",
+      "originalFilename": "hafiz_ghazal_f1b.webp",
+      "mimeType": "image/webp",
+      "fileSize": 420800,
+      "checksum": "2e7d2c03a9507ae265ecf5b5356885a53393a2029d241394997265a1a25aefc6",
+      "imageWidth": 1500,
+      "imageHeight": 2300,
+      "language": "fa",
+      "uploadedById": "usr_researcher_002"
+    }
+  ],
+  "recognitionJobs": [],
+  "transcriptions": [
+    {
+      "id": "tr_shahnameh_f01",
+      "version": 1,
+      "createdAt": "2026-10-29T14:42:14.467Z",
+      "updatedAt": "2026-10-29T14:48:35.052Z",
+      "pageId": "pg_shahnameh_f01",
+      "rawText": "به نام خداوند جان و خرد\nکزین برتر اندیشه برنگذرد\nخداوند نام و خداوند جای\nخداوند روزی ده رهنمای\nخداوند کیوان و گَردان سپهر\nفروزندهٔ ماه و ناهید و مهر",
+      "correctedText": "به نام خداوند جان و خرد\nکزین برتر اندیشه برنگذرد\nخداوند نام و خداوند جای\nخداوند روزی ده رهنمای\nخداوند کیوان و گَردان سپهر\nفروزندهٔ ماه و ناهید و مهر",
+      "normalizedSearchText": "به نام خداوند جان و خرد کزین برتر اندیشه برنگذرد خداوند نام و خداوند جای خداوند روزی ده رهنمای خداوند کیوان و گردان سپهر فروزنده ماه و ناهید و مهر",
+      "reviewStatus": "APPROVED",
+      "language": "fa",
+      "modelId": "mdl_trocr_persian_v1",
+      "modelVersion": "1.2.0"
+    },
+    {
+      "id": "tr_golestan_f01",
+      "version": 1,
+      "createdAt": "2026-10-29T14:42:14.468Z",
+      "updatedAt": "2026-10-29T14:48:35.052Z",
+      "pageId": "pg_golestan_f01",
+      "rawText": "منت خدای را عز و جل که طاعتش موجب قربت است و به شکر اندرش مزید نعمت. هر نفسی که فرو می‌رود ممدّ حیات است و چون برمی‌آید مفرّح ذات.",
+      "correctedText": "منت خدای را عز و جل که طاعتش موجب قربت است و به شکر اندرش مزید نعمت. هر نفسی که فرو می‌رود ممدّ حیات است و چون برمی‌آید مفرّح ذات.",
+      "normalizedSearchText": "منت خدای را عز و جل که طاعتش موجب قربت است و به شکر اندرش مزید نعمت. هر نفسی که فرو می‌رود ممد حیات است و چون برمی‌اید مفرح ذات.",
+      "reviewStatus": "APPROVED",
+      "language": "fa",
+      "modelId": "mdl_trocr_persian_v1",
+      "modelVersion": "1.2.0"
+    },
+    {
+      "id": "tr_qanun_f01",
+      "version": 1,
+      "createdAt": "2026-10-29T14:42:14.468Z",
+      "updatedAt": "2026-10-29T14:48:35.052Z",
+      "pageId": "pg_qanun_f01",
+      "rawText": "بسم الله الرحمن الرحيم. القول في حد الطب وموضوعه. قال الشيخ الرئيس أبو علي الحسين بن عبد الله بن سينا: الطب علم يتعرف منه أحوال بدن الإنسان من جهة ما يصح ويزول عن الصحة ليحفظ الصحة حاصلة ويستردها زائلة.",
+      "correctedText": "بسم الله الرحمن الرحيم. القول في حد الطب وموضوعه. قال الشيخ الرئيس أبو علي الحسين بن عبد الله بن سينا: الطب علم يتعرف منه أحوال بدن الإنسان من جهة ما يصح ويزول عن الصحة ليحفظ الصحة حاصلة ويستردها زائلة.",
+      "normalizedSearchText": "بسم الله الرحمن الرحیم. القول فی حد الطب وموضوعه. قال الشیخ الرئیس ابو علی الحسین بن عبد الله بن سینا: الطب علم یتعرف منه احوال بدن الانسان من جهة ما یصح ویزول عن الصحة لیحفظ الصحة حاصلة ویستردها زائلة.",
+      "reviewStatus": "PENDING_REVIEW",
+      "language": "ar",
+      "modelId": "mdl_crnn_arabic_v2",
+      "modelVersion": "2.1.0"
+    },
+    {
+      "id": "tr_concurrency_1793285200274",
+      "version": 2,
+      "createdAt": "2026-10-29T14:46:40.275Z",
+      "updatedAt": "2026-10-29T14:46:40.275Z",
+      "pageId": "pg_test_concurrency",
+      "rawText": "متن نخستین",
+      "correctedText": "ویرایش پژوهشگر اول",
+      "normalizedSearchText": "ویرایش پژوهشگر اول",
+      "reviewStatus": "PENDING_REVIEW",
+      "language": "fa"
+    },
+    {
+      "id": "tr_concurrency_1793285305976",
+      "version": 2,
+      "createdAt": "2026-10-29T14:48:25.976Z",
+      "updatedAt": "2026-10-29T14:48:25.977Z",
+      "pageId": "pg_test_concurrency",
+      "rawText": "متن نخستین",
+      "correctedText": "ویرایش پژوهشگر اول",
+      "normalizedSearchText": "ویرایش پژوهشگر اول",
+      "reviewStatus": "PENDING_REVIEW",
+      "language": "fa"
+    }
+  ],
+  "transcriptionRevisions": [
+    {
+      "id": "rev_1_tr_shahnameh_f01",
+      "createdAt": "2026-10-29T14:42:14.468Z",
+      "transcriptionId": "tr_shahnameh_f01",
+      "revisionNumber": 1,
+      "text": "به نام خداوند جان و خرد\nکزین برتر اندیشه برنگذرد\nخداوند نام و خداوند جای\nخداوند روزی ده رهنمای\nخداوند کیوان و گَردان سپهر\nفروزندهٔ ماه و ناهید و مهر",
+      "changedById": "usr_admin_001",
+      "changeSummary": "نسخه آغازین تصحیح‌شده از روی نسخه خطی شاه تهماسب"
+    }
+  ],
+  "datasets": [
+    {
+      "id": "ds_persian_htr_corpus",
+      "createdAt": "2026-10-29T14:42:14.469Z",
+      "updatedAt": "2026-10-29T14:48:35.053Z",
+      "name": "Persian Nastaliq & Shekasteh Manuscript Corpus",
+      "description": "Benchmark dataset containing 1,420 manually verified manuscript line samples in Nastaliq, Shekasteh, and Naskh scripts.",
+      "language": "fa",
+      "source": "University Consortium for Manuscript Studies",
+      "license": "CC-BY-NC 4.0",
+      "manifestLocation": "datasets/manifests/persian_htr_corpus.csv",
+      "manifestChecksum": "7f83b1657ff1fc53b92dc18148a1d65dfc2d4b1fa3d677284addd200126d9069",
+      "status": "READY",
+      "sampleCount": 1420,
+      "createdById": "usr_researcher_002"
+    },
+    {
+      "id": "ds_arabic_medical_manuscripts",
+      "createdAt": "2026-10-29T14:42:14.469Z",
+      "updatedAt": "2026-10-29T14:48:35.053Z",
+      "name": "Classical Arabic Scientific & Medical Manuscripts",
+      "description": "Line-level annotations from Avicenna, Al-Razi, and Ibn al-Nafis historical medical treatises.",
+      "language": "ar",
+      "source": "Bodleian & BnF Historical Archives",
+      "license": "Open Access Research",
+      "manifestLocation": "datasets/manifests/arabic_medical_corpus.csv",
+      "manifestChecksum": "a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0",
+      "status": "READY",
+      "sampleCount": 850,
+      "createdById": "usr_admin_001"
+    }
+  ],
+  "datasetSamples": [],
+  "modelRegistries": [
+    {
+      "id": "mdl_trocr_persian_v1",
+      "createdAt": "2026-10-29T14:42:14.466Z",
+      "name": "Persian TrOCR Historical Model",
+      "version": "1.2.0",
+      "baseModelId": "microsoft/trocr-base-stage1",
+      "providerType": "pretrained",
+      "supportedLanguages": [
+        "fa"
+      ],
+      "supportedModes": [
+        "FULL_PAGE",
+        "LINE"
+      ],
+      "artifactLocation": "models/trocr_persian_historical_v1.2.pt",
+      "license": "Apache-2.0",
+      "status": "ACTIVE",
+      "isAvailable": true
+    },
+    {
+      "id": "mdl_crnn_arabic_v2",
+      "createdAt": "2026-10-29T14:42:14.466Z",
+      "name": "Arabic BiLSTM-CRNN Manuscript Recognizer",
+      "version": "2.1.0",
+      "baseModelId": null,
+      "providerType": "pretrained",
+      "supportedLanguages": [
+        "ar"
+      ],
+      "supportedModes": [
+        "LINE"
+      ],
+      "artifactLocation": "models/crnn_arabic_manuscript_v2.pt",
+      "license": "MIT",
+      "status": "ACTIVE",
+      "isAvailable": true
+    },
+    {
+      "id": "mdl_bert_normalizer_fa",
+      "createdAt": "2026-10-29T14:42:14.466Z",
+      "name": "Persian/Arabic Text Normalizer & Punctuation Corrector",
+      "version": "1.0.0",
+      "baseModelId": "HooshvareLab/bert-fa-base-uncased",
+      "providerType": "pretrained",
+      "supportedLanguages": [
+        "fa",
+        "ar"
+      ],
+      "supportedModes": [
+        "LINE",
+        "FULL_PAGE"
+      ],
+      "artifactLocation": "models/bert_persian_norm_v1.bin",
+      "license": "Apache-2.0",
+      "status": "ACTIVE",
+      "isAvailable": true
+    }
+  ],
+  "evaluationExperiments": [
+    {
+      "id": "eval_bench_001",
+      "createdAt": "2026-10-29T14:42:14.469Z",
+      "modelId": "mdl_trocr_persian_v1",
+      "datasetId": "ds_persian_htr_corpus",
+      "language": "fa",
+      "sampleCount": 500,
+      "cer": 0.042,
+      "wer": 0.089,
+      "averageInferenceTimeMs": 142,
+      "configuration": {
+        "beamWidth": 5,
+        "normalizeUnicode": true,
+        "levenshteinMode": "standard"
+      }
+    },
+    {
+      "id": "eval_bench_002",
+      "createdAt": "2026-10-29T14:42:14.469Z",
+      "modelId": "mdl_crnn_arabic_v2",
+      "datasetId": "ds_arabic_medical_manuscripts",
+      "language": "ar",
+      "sampleCount": 300,
+      "cer": 0.068,
+      "wer": 0.124,
+      "averageInferenceTimeMs": 95,
+      "configuration": {
+        "beamWidth": 3,
+        "normalizeUnicode": true,
+        "levenshteinMode": "standard"
+      }
+    }
+  ],
+  "trainingJobs": [],
+  "auditEvents": [
+    {
+      "id": "aud_1793285346068",
+      "createdAt": "2026-10-29T14:49:06.068Z",
+      "userId": "usr_admin_001",
+      "action": "USER_LOGIN",
+      "entityType": "User",
+      "entityId": "usr_admin_001",
+      "metadata": {
+        "ip": "127.0.0.1",
+        "userAgent": "curl/7.88.1"
+      }
+    },
+    {
+      "id": "aud_init_1793285315053",
+      "createdAt": "2026-10-29T14:48:35.053Z",
+      "userId": "usr_admin_001",
+      "action": "SYSTEM_SEED_INITIALIZED",
+      "entityType": "System",
+      "entityId": "manuscript-ai-core",
+      "metadata": {
+        "seededAt": "2026-10-29T14:48:35.053Z"
+      }
+    },
+    {
+      "id": "aud_init_1793284934470",
+      "createdAt": "2026-10-29T14:42:14.470Z",
+      "userId": "usr_admin_001",
+      "action": "SYSTEM_SEED_INITIALIZED",
+      "entityType": "System",
+      "entityId": "manuscript-ai-core",
+      "metadata": {
+        "seededAt": "2026-10-29T14:42:14.470Z"
+      }
+    }
+  ]
+}

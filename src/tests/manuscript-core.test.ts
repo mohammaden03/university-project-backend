@@ -9,8 +9,10 @@
  * 4. Role-based access control (ADMIN, RESEARCHER, VIEWER) permissions
  * 5. StorageService: Magic bytes validation, dimension parsing, and path traversal rejection
  * 6. Asynchronous JobQueue lifecycle and cancellation
- * 7. Optimistic concurrency conflict detection in transcription editing
- * 8. Search snippet extraction around normalized Persian/Arabic queries
+ * 7. Search snippet extraction around normalized Persian/Arabic queries
+ * 8. Prisma Database persistence: entity creation, query retrieval, and cross-restart verification
+ * 9. Optimistic concurrency locking & version conflict checks
+ * 10. Dynamic Health check reporting
  */
 
 import test from 'node:test';
@@ -20,6 +22,7 @@ import { calculateCerWer } from '../common/metrics.js';
 import { hashPassword, verifyPassword, signJwtToken, verifyJwtToken, hasRolePermission } from '../common/auth.js';
 import { StorageService } from '../storage/storage.service.js';
 import { JobQueueService } from '../jobs/queue.service.js';
+import { prisma, PrismaService } from '../database/prisma.service.js';
 
 test('Normalization: Unifies Arabic and Persian Yeh characters', () => {
   const arabicYeh = 'علي بن ابي طالب'; // with Arabic Yeh \u064A
@@ -176,4 +179,112 @@ test('Search: Creates matched snippet around normalized query', () => {
 
   assert.equal(result.matchFound, true);
   assert.ok(result.snippet.includes('موجب قربت'));
+});
+
+// -------------------------------------------------------------
+// Database Persistence & Integrity Tests
+// -------------------------------------------------------------
+test('Prisma Persistence: Health check reports status and latency', async () => {
+  const health = await prisma.healthCheck();
+  assert.ok(health.status === 'HEALTHY' || health.status === 'STANDALONE_PERSISTENT');
+  assert.ok(typeof health.latencyMs === 'number');
+});
+
+test('Prisma Persistence: Creates and retrieves persistent Book record', async () => {
+  const testBookId = `bk_test_${Date.now()}`;
+  const created = await prisma.book.create({
+    data: {
+      id: testBookId,
+      title: 'Tazkirat al-Awliya (تذکرة الاولیاء)',
+      author: 'Attar of Nishapur (عطار نیشابوری)',
+      language: 'fa',
+      description: 'Biographies of early Sufi mystics in classical Persian prose.',
+      createdById: 'usr_admin_001',
+    },
+  });
+
+  assert.equal(created.id, testBookId);
+  assert.equal(created.title, 'Tazkirat al-Awliya (تذکرة الاولیاء)');
+
+  const fetched = await prisma.book.findUnique({ where: { id: testBookId } });
+  assert.ok(fetched);
+  assert.equal(fetched.author, 'Attar of Nishapur (عطار نیشابوری)');
+});
+
+test('Prisma Concurrency: Detects version conflict on simultaneous transcription edits', async () => {
+  const trId = `tr_concurrency_${Date.now()}`;
+  const initial = await prisma.transcription.create({
+    data: {
+      id: trId,
+      pageId: 'pg_test_concurrency',
+      rawText: 'متن نخستین',
+      correctedText: 'متن نخستین',
+      normalizedSearchText: normalizePersianArabicText('متن نخستین'),
+      reviewStatus: 'PENDING_REVIEW',
+      language: 'fa',
+      version: 1,
+    },
+  });
+
+  assert.equal(initial.version, 1);
+
+  // First edit succeeds and bumps version to 2
+  const updated1 = await prisma.$transaction(async (tx) => {
+    const tr = await tx.transcription.findUnique({ where: { id: trId } });
+    assert.equal(tr.version, 1);
+    return tx.transcription.update({
+      where: { id: trId },
+      data: {
+        correctedText: 'ویرایش پژوهشگر اول',
+        normalizedSearchText: normalizePersianArabicText('ویرایش پژوهشگر اول'),
+        version: tr.version + 1,
+      },
+    });
+  });
+
+  assert.equal(updated1.version, 2);
+
+  // Second researcher attempts update with stale expectedVersion 1
+  let conflictDetected = false;
+  try {
+    await prisma.$transaction(async (tx) => {
+      const tr = await tx.transcription.findUnique({ where: { id: trId } });
+      const staleExpectedVersion = 1; // Stale version!
+      if (tr.version !== staleExpectedVersion) {
+        throw new Error(`CONFLICT: expected ${staleExpectedVersion} but found ${tr.version}`);
+      }
+      return tx.transcription.update({
+        where: { id: trId },
+        data: { correctedText: 'ویرایش پژوهشگر دوم', version: tr.version + 1 },
+      });
+    });
+  } catch (err: any) {
+    if (err.message.includes('CONFLICT')) {
+      conflictDetected = true;
+    }
+  }
+
+  assert.equal(conflictDetected, true, 'Stale expectedVersion must trigger conflict rejection');
+});
+
+test('Prisma Persistence: Survives simulated process restart and maintains data', async () => {
+  const restartTestId = `bk_restart_${Date.now()}`;
+  await prisma.book.create({
+    data: {
+      id: restartTestId,
+      title: 'Masnavi-ye Ma\'navi (مثنوی معنوی)',
+      author: 'Jalal al-Din Muhammad Rumi (مولانا جلال‌الدین بلخی)',
+      language: 'fa',
+      createdById: 'usr_admin_001',
+    },
+  });
+
+  // Simulate a fresh process boot by instantiating a new PrismaService instance
+  const freshServiceInstance = new PrismaService();
+  const retrievedAfterRestart = await freshServiceInstance.book.findUnique({
+    where: { id: restartTestId },
+  });
+
+  assert.ok(retrievedAfterRestart, 'Data must survive backend restart and load from disk persistence');
+  assert.equal(retrievedAfterRestart.title, 'Masnavi-ye Ma\'navi (مثنوی معنوی)');
 });

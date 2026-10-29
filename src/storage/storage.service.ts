@@ -42,6 +42,19 @@ export class StorageService {
     }
   }
 
+  public isStorageAccessible(): boolean {
+    try {
+      this.ensureDirectory(this.uploadDir);
+      return fs.existsSync(this.uploadDir);
+    } catch {
+      return false;
+    }
+  }
+
+  public getUploadDirectory(): string {
+    return this.uploadDir;
+  }
+
   /**
    * Detects true MIME type from file magic bytes
    */

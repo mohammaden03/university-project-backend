@@ -1,12 +1,13 @@
 /**
  * Manuscript AI - Core Backend Application Server
  *
- * Implements a standalone NestJS/Express REST API:
+ * Implements a standalone Express REST API with PostgreSQL/Prisma persistence:
  * - Completely decoupled from frontend: zero Vite middleware or React serving
  * - Redirects root (/) directly to Swagger API Documentation (/api/docs)
  * - Exposes OpenAPI 3.0 specification at /api/docs-json
  * - Background queue processor integration for asynchronous HTR recognition jobs
  * - Comprehensive CORS configuration for independent React frontends
+ * - Automatic seed initialization if database is unpopulated on startup
  */
 
 import express, { Request, Response, NextFunction } from 'express';
@@ -18,8 +19,8 @@ import { errorResponse } from './src/common/response.js';
 import { prisma } from './src/database/prisma.service.js';
 import { jobQueue } from './src/jobs/queue.service.js';
 import { aiClient } from './src/recognition/ai-client.service.js';
-import { db } from './src/database/store.js';
 import { normalizePersianArabicText } from './src/common/normalization.js';
+import { runPrismaSeed } from './prisma/seed.js';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -110,7 +111,8 @@ jobQueue.registerProcessor('RECOGNITION', async (job) => {
     recognitionMode: string;
     imagePath: string;
   };
-  const page = db.pages.get(pageId);
+
+  const page = await prisma.manuscriptPage.findUnique({ where: { id: pageId } });
   const language = page?.language || 'fa';
 
   console.log(`[JobQueue] Processing HTR job ${job.id} for page ${pageId} (Mode: ${recognitionMode}, Model: ${modelId})`);
@@ -118,56 +120,62 @@ jobQueue.registerProcessor('RECOGNITION', async (job) => {
   // Invoke AI service client
   const result = await aiClient.recognizePage(imagePath, language, modelId);
 
-  // Update in-memory and database records
-  const dbJob = db.jobs.get(job.id);
-  if (dbJob) {
-    dbJob.status = 'COMPLETED';
-    dbJob.completedAt = new Date().toISOString();
-    dbJob.processingDurationMs = result.durationMs;
-  }
+  // Update recognition job in database
+  await prisma.recognitionJob.update({
+    where: { id: job.id },
+    data: {
+      status: 'COMPLETED',
+      completedAt: new Date().toISOString(),
+      processingDurationMs: result.durationMs,
+    },
+  });
 
   // Create or update transcription
-  const now = new Date().toISOString();
-  let transcription = Array.from(db.transcriptions.values()).find((t) => t.pageId === pageId);
+  let transcription = await prisma.transcription.findFirst({ where: { pageId } });
 
   if (!transcription) {
-    transcription = {
-      id: `tr_${pageId.replace('pg_', '')}`,
-      pageId,
-      recognitionJobId: job.id,
-      rawText: result.text,
-      correctedText: result.text,
-      normalizedSearchText: normalizePersianArabicText(result.text),
-      reviewStatus: 'PENDING_REVIEW',
-      language,
-      modelId: result.modelId,
-      modelVersion: result.modelVersion,
-      version: 1,
-      createdAt: now,
-      updatedAt: now,
-    };
-    db.transcriptions.set(transcription.id, transcription);
+    transcription = await prisma.transcription.create({
+      data: {
+        id: `tr_${pageId.replace('pg_', '')}`,
+        pageId,
+        recognitionJobId: job.id,
+        rawText: result.text,
+        correctedText: result.text,
+        normalizedSearchText: normalizePersianArabicText(result.text),
+        reviewStatus: 'PENDING_REVIEW',
+        language,
+        modelId: result.modelId,
+        modelVersion: result.modelVersion,
+        version: 1,
+      },
+    });
   } else {
-    transcription.rawText = result.text;
-    transcription.correctedText = result.text;
-    transcription.normalizedSearchText = normalizePersianArabicText(result.text);
-    transcription.modelId = result.modelId;
-    transcription.modelVersion = result.modelVersion;
-    transcription.updatedAt = now;
+    transcription = await prisma.transcription.update({
+      where: { id: transcription.id },
+      data: {
+        rawText: result.text,
+        correctedText: result.text,
+        normalizedSearchText: normalizePersianArabicText(result.text),
+        modelId: result.modelId,
+        modelVersion: result.modelVersion,
+      },
+    });
   }
 
   // Record initial revision
-  const revisionsList = db.revisions.get(transcription.id) || [];
-  revisionsList.push({
-    id: `rev_${revisionsList.length + 1}_${transcription.id}`,
-    transcriptionId: transcription.id,
-    revisionNumber: revisionsList.length + 1,
-    text: result.text,
-    changedById: requestedById,
-    changeSummary: `Automatic HTR recognition (${result.isMock ? 'Mock Provider' : result.modelId})`,
-    createdAt: now,
+  const revCount = await prisma.transcriptionRevision.count({ where: { transcriptionId: transcription.id } });
+  const nextRevNum = revCount + 1;
+
+  await prisma.transcriptionRevision.create({
+    data: {
+      id: `rev_${nextRevNum}_${transcription.id}`,
+      transcriptionId: transcription.id,
+      revisionNumber: nextRevNum,
+      text: result.text,
+      changedById: requestedById,
+      changeSummary: `Automatic HTR recognition (${result.isMock ? 'Mock Provider' : result.modelId})`,
+    },
   });
-  db.revisions.set(transcription.id, revisionsList);
 
   return result;
 });
@@ -178,25 +186,36 @@ async function bootstrap() {
   const uploadDir = path.resolve(process.env.UPLOAD_DIR || './storage/uploads');
   const modelDir = path.resolve(process.env.MODEL_DIR || './storage/models');
   fs.mkdirSync(uploadDir, { recursive: true });
-  fs.mkdirSync(path.join(uploadDir, 'folios'), { recursive: true });
   fs.mkdirSync(modelDir, { recursive: true });
 
-  // Connect Prisma if PostgreSQL is available
+  // Connect Prisma persistence layer
   await prisma.onModuleInit();
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`====================================================`);
-    console.log(` Manuscript AI Standalone Backend running on port ${PORT}`);
-    console.log(` Base API:      http://localhost:${PORT}/api/v1`);
-    console.log(` Swagger Docs:  http://localhost:${PORT}/api/docs`);
-    console.log(` OpenAPI Spec:  http://localhost:${PORT}/api/docs-json`);
-    console.log(` Health Check:  http://localhost:${PORT}/api/v1/health`);
-    console.log(` Frontend CORS: ${allowedOrigins.join(', ')}`);
-    console.log(`====================================================`);
+  // If database is completely empty, initialize seed data
+  const userCount = await prisma.user.count();
+  if (userCount === 0) {
+    console.log('[Server] Database is empty. Seeding historical manuscripts and accounts...');
+    await runPrismaSeed(prisma);
+  }
+
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log('===========================================================');
+    console.log(`  Manuscript AI Backend API running at http://0.0.0.0:${PORT}`);
+    console.log(`  Swagger UI Documentation: http://0.0.0.0:${PORT}/api/docs`);
+    console.log(`  OpenAPI Specification:    http://0.0.0.0:${PORT}/api/docs-json`);
+    console.log(`  Health & Readiness Check: http://0.0.0.0:${PORT}/api/v1/health`);
+    console.log('===========================================================');
   });
+
+  return { app, server };
 }
 
-bootstrap().catch((err) => {
-  console.error('Failed to start Manuscript AI server:', err);
-  process.exit(1);
-});
+export { app, bootstrap };
+
+// Direct execution entrypoint
+if (process.argv[1]?.endsWith('server.ts') || process.argv[1]?.endsWith('server.js')) {
+  bootstrap().catch((err) => {
+    console.error('[FATAL_STARTUP_ERROR]', err);
+    process.exit(1);
+  });
+}

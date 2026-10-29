@@ -48,7 +48,8 @@ export class AiClientService {
   /**
    * Health probe for the Python AI microservice
    */
-  public async getAiHealth(): Promise<{ isHealthy: boolean; details?: any; error?: string }> {
+  public async getAiHealth(): Promise<{ status: string; isHealthy: boolean; provider: string; latencyMs: number; details?: any; error?: string }> {
+    const start = Date.now();
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000);
@@ -58,13 +59,15 @@ export class AiClientService {
       });
       clearTimeout(timeoutId);
 
+      const latencyMs = Date.now() - start;
       if (res.ok) {
         const data = await res.json();
-        return { isHealthy: true, details: data };
+        return { status: 'HEALTHY', isHealthy: true, provider: this.providerType, latencyMs, details: data };
       }
-      return { isHealthy: false, error: `HTTP ${res.status}` };
+      return { status: 'DEGRADED', isHealthy: false, provider: this.providerType, latencyMs, error: `HTTP ${res.status}` };
     } catch (err: any) {
-      return { isHealthy: false, error: err.message || 'Connection refused to AI microservice' };
+      const latencyMs = Date.now() - start;
+      return { status: 'OFFLINE', isHealthy: false, provider: this.providerType, latencyMs, error: err.message || 'Connection refused to AI microservice' };
     }
   }
 

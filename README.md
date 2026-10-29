@@ -1,6 +1,6 @@
 # Manuscript AI — Backend Platform
 
-An academic platform for handwritten text recognition (HTR), optical character recognition (OCR), historical Persian and Arabic manuscript cataloging, transcription correction with revision history, dataset management, and CER/WER evaluation.
+An academic research platform for handwritten text recognition (HTR), optical character recognition (OCR), historical Persian and Arabic manuscript cataloging, transcription correction with revision history, dataset management, and CER/WER evaluation.
 
 ---
 
@@ -10,52 +10,94 @@ An academic platform for handwritten text recognition (HTR), optical character r
 - **Interactive Swagger Documentation**: `http://localhost:3000/api/docs`
 - **OpenAPI 3.0 Specification**: `http://localhost:3000/api/docs-json`
 - **Health Check & Readiness**: `http://localhost:3000/api/v1/health`
-- **Interactive Academic Workbench**: `http://localhost:3000/`
 
 ---
 
-## 2. Default Seed Credentials
+## 2. Architecture & Data Flow
 
-| Role | Email | Password | Permissions |
-| :--- | :--- | :--- | :--- |
-| **Admin** | `admin@manuscript.ai` | `AdminPass2026!` | Full system administration, models, training jobs, audit logs |
-| **Researcher** | `researcher@manuscript.ai` | `ResearchPass2026!` | Book CRUD, folio uploads, HTR jobs, transcription editing & approval |
-| **Viewer** | `viewer@manuscript.ai` | `ViewerPass2026!` | Read-only access to published manuscripts, folios, and approved text |
+```
+[Separate React Frontend] (Port 5173)
+           │
+           ▼ (REST API / Bearer JWT)
+[Manuscript AI Backend] (Express + TypeScript, Port 3000)
+    ├── Auth & RBAC (ADMIN, RESEARCHER, VIEWER)
+    ├── Persian/Arabic Unicode Normalization
+    ├── Asynchronous JobQueue (BullMQ/Redis abstraction)
+    ├── StorageService (Magic bytes, SHA-256, path traversal guard)
+    └── Prisma PostgreSQL Persistence Layer
+           │
+           ├──► [PostgreSQL 16] (Relational Persistence & Transactions)
+           ├──► [Redis 7] (Queue & State Store)
+           └──► [Python FastAPI AI Service] (Port 8000: TrOCR / CRNN Inference)
+```
 
 ---
 
-## 3. Starting the Backend
+## 3. Local Development & Commands
 
-### Local Development (Host-based)
+### Prerequisites
+- Node.js >= 18
+- Docker & Docker Compose (or local PostgreSQL 16 & Redis 7)
+
+### Local Setup
 ```bash
 # 1. Install dependencies
 npm install
 
-# 2. Run unit tests
+# 2. Configure environment
+cp .env.example .env
+
+# 3. Seed initial historical manuscripts & accounts explicitly (dev/testing)
+# Configure custom passwords via environment variables:
+ADMIN_INITIAL_PASSWORD="your-strong-admin-password" \
+RESEARCHER_INITIAL_PASSWORD="your-strong-researcher-password" \
+VIEWER_INITIAL_PASSWORD="your-strong-viewer-password" \
+npm run seed
+
+# 4. Run test suite (unit + PostgreSQL/Prisma integration tests)
 npm test
 
-# 3. Start full-stack server
+# 5. Start development server
 npm run dev
+
+# 6. Production build & start
+npm run build
+npm start
 ```
 
-### Docker-based Orchestration (Full Stack: PostgreSQL + Backend + AI Service)
+### Full-Stack Docker Deployment
 ```bash
 docker-compose up -d --build
 ```
+This provisions:
+- `manuscript-ai-postgres`: PostgreSQL 16 on port 5432 with health checks
+- `manuscript-ai-redis`: Redis 7 on port 6379 with health checks
+- `manuscript-ai-backend`: Express REST API on port 3000
+- `manuscript-ai-inference`: Python FastAPI microservice on port 8000
 
 ---
 
-## 4. Frontend Integration & TypeScript Type Generation
+## 4. Environment Variables Configuration
 
-The React frontend is developed independently. You can automatically generate end-to-end typed API definitions directly from this backend's OpenAPI specification:
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `PORT` | HTTP port for the backend server | `3000` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://app_user:...@localhost:5432/manuscript_ai` |
+| `REDIS_URL` | Redis connection string for asynchronous queue | `redis://localhost:6379` |
+| `AI_SERVICE_URL` | URL to Python FastAPI inference microservice | `http://localhost:8000` |
+| `AI_PROVIDER` | AI provider mode (`mock`, `pretrained`, `finetuned`) | `mock` |
+| `JWT_ACCESS_SECRET` | Secret key for signing HMAC-SHA256 JWT tokens | *(Required, 32+ chars)* |
+| `UPLOAD_DIR` | Filesystem path for manuscript folio images | `./storage/uploads` |
+| `MODEL_DIR` | Filesystem path for AI model checkpoints | `./storage/models` |
+| `ADMIN_INITIAL_PASSWORD` | Explicit password used only during `npm run seed` | *(Custom)* |
 
-```bash
-# Inside your separate React frontend repository:
-npx openapi-typescript http://localhost:3000/api/docs-json -o src/types/api.d.ts
-```
+---
 
-### Standard API Response Envelope
+## 5. Standard API Response Envelope
+
 Every endpoint returns a consistent JSON envelope:
+
+### Success Response
 ```json
 {
   "success": true,
@@ -64,7 +106,7 @@ Every endpoint returns a consistent JSON envelope:
 }
 ```
 
-For paginated resources:
+### Paginated Response
 ```json
 {
   "success": true,
@@ -78,15 +120,15 @@ For paginated resources:
 }
 ```
 
-For errors:
+### Error Response
 ```json
 {
   "success": false,
   "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Title is a mandatory field",
+    "code": "CONFLICT",
+    "message": "Conflict detected: This transcription was modified by another researcher",
     "details": [
-      { "field": "title", "message": "Title cannot be empty" }
+      { "field": "expectedVersion", "message": "Current version is 2" }
     ]
   }
 }
@@ -94,68 +136,52 @@ For errors:
 
 ---
 
-## 5. Complete Implemented Endpoint Catalog
+## 6. Complete Endpoint Catalog
 
-### Authentication
-- `POST /api/v1/auth/login` — Authenticate and receive JWT access token
-- `GET /api/v1/auth/me` — Retrieve current authenticated user profile
-- `POST /api/v1/auth/logout` — Invalidate user session
-
-### Books Management
-- `GET /api/v1/books` — Paginated list with language filters (`fa`, `ar`, `ota`) and search
-- `POST /api/v1/books` — Create new manuscript record
-- `GET /api/v1/books/:id` — Retrieve book metadata
-- `PATCH /api/v1/books/:id` — Update book metadata
-- `DELETE /api/v1/books/:id` — Delete book (ADMIN only)
-
-### Manuscript Pages & Folios
-- `GET /api/v1/books/:bookId/pages` — List folios of a book
-- `POST /api/v1/books/:bookId/pages` — Upload/register manuscript page
-- `GET /api/v1/pages/:id` — Retrieve page metadata and line segmentations
-- `PATCH /api/v1/pages/:id` — Update page annotations
-- `DELETE /api/v1/pages/:id` — Delete page
-- `GET /api/v1/pages/:id/image` — Retrieve high-res folio image or facsimile SVG
-
-### Recognition & HTR Pipeline
-- `POST /api/v1/pages/:id/recognition-jobs` — Submit page for HTR (LINE or FULL_PAGE)
-- `GET /api/v1/recognition-jobs` — List jobs with status and durations
-- `GET /api/v1/recognition-jobs/:id` — Retrieve job status
-- `POST /api/v1/recognition-jobs/:id/cancel` — Cancel queued/processing job
-
-### Transcriptions & Revisions
-- `GET /api/v1/pages/:id/transcriptions` — Get page transcription
-- `GET /api/v1/transcriptions/:id` — Get transcription by ID
-- `PATCH /api/v1/transcriptions/:id` — Edit text with optimistic locking version check
-- `GET /api/v1/transcriptions/:id/revisions` — Historical revision tree with timestamps and user IDs
-- `POST /api/v1/transcriptions/:id/approve` — Mark transcription as APPROVED
-
-### Advanced Search
-- `GET /api/v1/search` — Parameterized search with automatic Persian/Arabic Unicode normalization (unifying Yeh, Kaf, Alef, stripping diacritics and tatweel)
-
-### Datasets
-- `GET /api/v1/datasets` — List registered datasets
-- `POST /api/v1/datasets/validate` — Validate CSV manifests for missing columns, path traversal, and split counts
-
-### Model Registry & Evaluations
-- `GET /api/v1/models` — List HTR models and availability status
-- `POST /api/v1/evaluations` — Run Levenshtein CER & WER evaluation against ground-truth samples
-- `GET /api/v1/evaluations` — Historical benchmark reports
-
-### Training & System Management
-- `GET /api/v1/dashboard/stats` — Real calculated counts for books, pages, jobs, and models
-- `POST /api/v1/training-jobs` — Dispatch TrOCR fine-tuning job
-- `GET /api/v1/training-jobs` — Monitor training runs and logs
-- `GET /api/v1/audit/events` — Retrieve security audit trail (ADMIN only)
-- `GET /api/v1/health` — System readiness and health check
+| Method | Endpoint | Access Role | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/health` | Public | Dynamic readiness check (DB, Storage, AI service) |
+| `POST` | `/api/v1/auth/login` | Public | Authenticate and obtain JWT access & refresh tokens |
+| `GET` | `/api/v1/auth/me` | Authenticated | Retrieve current user profile and role |
+| `POST` | `/api/v1/auth/logout` | Authenticated | Invalidate session and audit event log |
+| `GET` | `/api/v1/books` | Public | List books with search, language filter, pagination |
+| `POST` | `/api/v1/books` | RESEARCHER | Register historical manuscript book |
+| `GET` | `/api/v1/books/:id` | Public | Get book metadata and associated page folios |
+| `PATCH` | `/api/v1/books/:id` | RESEARCHER | Update book catalog details |
+| `DELETE` | `/api/v1/books/:id` | ADMIN | Delete book and associated pages |
+| `GET` | `/api/v1/books/:bookId/pages` | Public | List pages/folios belonging to a book |
+| `POST` | `/api/v1/books/:bookId/pages` | RESEARCHER | Upload/register manuscript page |
+| `GET` | `/api/v1/pages/:id` | Public | Get single manuscript page metadata |
+| `PATCH` | `/api/v1/pages/:id` | RESEARCHER | Update page folio label, language, or lines |
+| `DELETE` | `/api/v1/pages/:id` | ADMIN | Delete manuscript page |
+| `GET` | `/api/v1/pages/:id/image` | Public | Stream binary folio image (returns 404 if missing) |
+| `POST` | `/api/v1/pages/:id/recognition-jobs` | RESEARCHER | Submit asynchronous HTR recognition job |
+| `GET` | `/api/v1/recognition-jobs` | Public | List HTR jobs with status |
+| `GET` | `/api/v1/recognition-jobs/:id` | Public | Get status and duration of recognition job |
+| `POST` | `/api/v1/recognition-jobs/:id/cancel`| RESEARCHER | Cancel queued or running recognition job |
+| `GET` | `/api/v1/pages/:id/transcriptions` | Public | Get page transcription and revision history |
+| `GET` | `/api/v1/transcriptions/:id` | Public | Get specific transcription |
+| `PATCH` | `/api/v1/transcriptions/:id` | RESEARCHER | Update transcription with optimistic concurrency |
+| `GET` | `/api/v1/transcriptions/:id/revisions`| Public | List historical revisions for transcription |
+| `POST` | `/api/v1/transcriptions/:id/approve` | RESEARCHER | Approve scholarly transcription |
+| `GET` | `/api/v1/search` | Public | Full-text search with Persian/Arabic normalization |
+| `GET` | `/api/v1/dashboard/stats` | Public | Real-time aggregate platform statistics |
+| `GET` | `/api/v1/datasets` | Public | List registered benchmark datasets |
+| `POST` | `/api/v1/datasets/validate` | Public | Validate manifest CSV columns and path traversal |
+| `GET` | `/api/v1/models` | Public | List available neural HTR models |
+| `GET` | `/api/v1/evaluations` | Public | List CER/WER benchmark experiments |
+| `POST` | `/api/v1/evaluations` | RESEARCHER | Run evaluation experiment calculating CER & WER |
+| `GET` | `/api/v1/training-jobs` | Public | List fine-tuning jobs |
+| `POST` | `/api/v1/training-jobs` | ADMIN | Launch model fine-tuning job |
+| `GET` | `/api/v1/audit/events` | ADMIN | Retrieve security audit events |
 
 ---
 
-## 6. Persian & Arabic Normalization Rules
+## 7. Frontend Integration & TypeScript Type Generation
 
-Original historical texts are strictly preserved in `rawText` and `correctedText`. For indexing and search, a separate `normalizedSearchText` is generated with:
-- Unification of Arabic Yeh (`ي` \u064A) and Alef Maqsura (`ى` \u0649) to Persian Yeh (`ی` \u06CC)
-- Unification of Arabic Kaf (`ك` \u0643) to Persian Kaf (`ک` \u06A9)
-- Normalization of Alef variants (`آ`, `أ`, `إ`, `ٱ` -> `ا`)
-- Stripping of Arabic Harakat / Tashkeel diacritics (Fatha, Damma, Kasra, Sukun, Shadda, Tanween)
-- Stripping of Tatweel / Kashida (`ـ`)
-- Normalization of Zero-Width Non-Joiner (ZWNJ) and whitespace collapsing
+The separate React frontend can generate typed API definitions directly from this backend:
+
+```bash
+# Inside the separate React frontend repository:
+npx openapi-typescript http://localhost:3000/api/docs-json -o src/types/api.d.ts
+```
